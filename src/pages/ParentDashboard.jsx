@@ -7,8 +7,8 @@ import { subscribeBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  Bus, Clock, User, CheckCircle2, 
-  AlertCircle, MessageSquare, RefreshCw, Radio, WifiOff, X 
+  MessageSquare, AlertCircle, 
+  MapPin, CheckCircle2, WifiOff, X, Navigation 
 } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -32,10 +32,16 @@ export default function ParentDashboard() {
   const [reportType, setReportType] = useState('Bus hasn\'t moved');
   const [reportDesc, setReportDesc] = useState('');
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [focusTrigger, setFocusTrigger] = useState(0);
 
   const busId = currentUser?.busId || 'BUS24';
-  const studentName = currentUser?.studentName || 'Aarav';
-  const studentClass = currentUser?.studentClass || 'Class 8-A';
+
+  // Timer to keep relative time updated
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check Firebase Connection State
   useEffect(() => {
@@ -80,108 +86,142 @@ export default function ParentDashboard() {
     }
   };
 
-  const formatTime = (ts) => {
-    if (!ts) return '--:--';
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const getRelativeTime = (ts) => {
+    if (!ts) return 'Never';
+    const diffMs = Math.max(0, now - ts);
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 10) return '8 seconds ago';
+    if (diffSec < 60) return `${diffSec} seconds ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin === 1) return '1 minute ago';
+    if (diffMin < 60) return `${diffMin} minutes ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    return `${diffHours} hours ago`;
   };
 
   const isLive = busData.status === 'LIVE';
   const isCompleted = busData.status === 'COMPLETED';
   const isNotStarted = !isLive && !isCompleted;
+  
+  // Stale threshold: 2 minutes (120,000ms) without updates during a live trip
+  const STALE_THRESHOLD_MS = 2 * 60 * 1000;
+  const isStale = isLive && Boolean(busData.lastUpdated) && (now - busData.lastUpdated > STALE_THRESHOLD_MS);
+
+  const busNumberText = busData.busNumber || 'BUS 24';
+  const routeNumberText = busData.routeNumber || 'ROUTE 04';
+
+  const handleFocusBus = () => {
+    setFocusTrigger((prev) => prev + 1);
+  };
 
   return (
     <div className="parent-dashboard-page">
       <div className="dashboard-container">
-        {/* Connection Offline Banner */}
+
+        {/* Offline Banner */}
         {!isConnected && (
-          <div className="gps-error-banner offline">
-            <WifiOff size={20} />
-            <div className="error-text">
-              <strong>⚠️ LOCATION TEMPORARILY UNAVAILABLE</strong>
-              <p>Showing last known location at {formatTime(busData.lastUpdated)}</p>
-            </div>
+          <div className="offline-banner">
+            <WifiOff size={18} />
+            <span>Connection temporarily offline. Showing last known coordinates.</span>
           </div>
         )}
 
-        {/* Student & Transport Profile Card */}
-        <div className="card parent-info-card">
-          <div className="student-profile-header">
-            <div className="student-avatar">
-              <User size={28} />
-            </div>
-            <div className="student-details">
-              <h2>{studentName}</h2>
-              <span className="student-meta">{studentClass} · St. Mary's High School</span>
+        {/* Top Status & Information Panel */}
+        <div className="parent-status-panel">
+          <div className="status-identity">
+            <div className="bus-identifiers">
+              <span className="bus-number-title">{busNumberText}</span>
+              <span className="route-badge">{routeNumberText}</span>
             </div>
 
-            <div className="parent-actions-group">
-              <button
-                onClick={() => setShowCommPanel(!showCommPanel)}
-                className="btn btn-outline btn-sm"
-              >
-                <MessageSquare size={16} /> Contact Driver
-              </button>
-
-              <button
-                onClick={() => setShowReportModal(true)}
-                className="btn btn-outline btn-sm btn-report"
-              >
-                <AlertCircle size={16} /> Report Issue
-              </button>
+            <div className="status-indicator-group">
+              {isStale && (
+                <div className="status-badge stale">
+                  ⚠️ LOCATION MAY BE OUTDATED
+                </div>
+              )}
+              {!isStale && isLive && (
+                <div className="status-badge live">
+                  <span className="pulse-dot" /> 🟢 LIVE
+                </div>
+              )}
+              {isNotStarted && (
+                <div className="status-badge not-started">
+                  NOT STARTED
+                </div>
+              )}
+              {isCompleted && (
+                <div className="status-badge completed">
+                  TRIP COMPLETED
+                </div>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Bus Status & Interactive Leaflet Live Map Card */}
-        <div className="card parent-status-card">
-          {/* Header Banner depending on Status */}
-          <div className="state-header">
-            {isNotStarted && (
-              <span className="status-badge not-started">
-                <span className="pulse-dot red" /> 🔴 BUS NOT STARTED
-              </span>
+          <div className="status-subtitle-row">
+            {isStale && (
+              <p className="subtitle-text text-stale">
+                Last updated {getRelativeTime(busData.lastUpdated)}. Coordinates may not reflect exact live movement.
+              </p>
             )}
-            {isLive && (
-              <span className="status-badge live">
-                <span className="pulse-dot green" /> 🟢 BUS ON THE WAY {busData.isDemoMode ? '[DEMO MODE]' : ''}
-              </span>
+            {!isStale && isLive && (
+              <p className="subtitle-text">
+                Last updated {getRelativeTime(busData.lastUpdated)}
+              </p>
+            )}
+            {isNotStarted && (
+              <p className="subtitle-text">
+                Your bus hasn't started its trip yet.
+              </p>
             )}
             {isCompleted && (
-              <span className="status-badge completed">
-                <CheckCircle2 size={16} /> ⚪ TRIP COMPLETED
-              </span>
+              <p className="subtitle-text">
+                Today's bus trip has ended.
+              </p>
             )}
-
-            <div className="live-update-indicator">
-              <Radio size={16} className={`pulse-ring ${isLive ? 'text-success' : 'text-muted'}`} />
-              <span>{isLive ? 'Realtime Tracking Active' : isCompleted ? 'Trip Completed' : 'Waiting for Driver'}</span>
-            </div>
-          </div>
-
-          <div className="live-meta-row">
-            <div className="meta-box">
-              <Clock size={16} className="text-muted" />
-              <span>Started: <strong>{formatTime(busData.startedAt)}</strong></span>
-            </div>
-
-            <div className="meta-box">
-              <RefreshCw size={16} className="text-muted" />
-              <span>Last Updated: <strong>{formatTime(busData.lastUpdated)}</strong></span>
-            </div>
-
-            <div className="meta-box">
-              <Bus size={16} className="text-primary" />
-              <span><strong>{busData.busNumber || 'Bus 24'}</strong> · {busData.routeNumber || 'Route 04'}</span>
-            </div>
-          </div>
-
-          {/* Leaflet Map - Prominently Displayed for Parents */}
-          <div className="parent-map-container">
-            <BusMap busData={busData} />
           </div>
         </div>
 
-        {/* Realtime Driver-Parent Communication Drawer */}
+        {/* Centerpiece Google Map Container */}
+        <div className="parent-map-section">
+          <div className="map-toolbar">
+            <div className="map-toolbar-info">
+              <MapPin size={16} />
+              <span>{isLive ? 'Live Tracking Active' : 'Bus Location Map'}</span>
+            </div>
+
+            <button
+              onClick={handleFocusBus}
+              className="btn btn-primary btn-sm"
+              title="Focus map on bus position"
+            >
+              <Navigation size={14} /> View / Focus Bus
+            </button>
+          </div>
+
+          <div className="map-frame">
+            <BusMap busData={busData} key={focusTrigger} />
+          </div>
+        </div>
+
+        {/* Secondary Actions Bar */}
+        <div className="parent-actions-bar">
+          <button
+            onClick={() => setShowCommPanel(!showCommPanel)}
+            className="btn btn-outline"
+          >
+            <MessageSquare size={16} /> Contact Driver
+          </button>
+
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="btn btn-ghost text-muted"
+          >
+            <AlertCircle size={16} /> Report Issue
+          </button>
+        </div>
+
+        {/* Driver Communication Panel (Drawer) */}
         {showCommPanel && (
           <div className="comm-panel-container">
             <CommunicationPanel
@@ -192,8 +232,10 @@ export default function ParentDashboard() {
           </div>
         )}
 
-        {/* AI Transport Assistant Widget */}
-        <NishchitAssistant busData={busData} currentUser={currentUser} />
+        {/* Secondary AI Transport Assistant Widget */}
+        <div className="assistant-wrapper-secondary">
+          <NishchitAssistant busData={busData} currentUser={currentUser} />
+        </div>
 
         {/* Report Issue Modal */}
         {showReportModal && (
@@ -208,7 +250,7 @@ export default function ParentDashboard() {
 
               {reportSubmitted ? (
                 <div className="report-success-box">
-                  <CheckCircle2 size={32} color="#10b981" />
+                  <CheckCircle2 size={32} color="#15803d" />
                   <p>Your report has been submitted to transport administration.</p>
                 </div>
               ) : (
@@ -250,3 +292,4 @@ export default function ParentDashboard() {
     </div>
   );
 }
+
