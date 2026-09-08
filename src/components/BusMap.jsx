@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
 import { ShieldCheck, Clock, MapPin, Bus } from 'lucide-react';
+import { isValidCoordinate } from '../utils/busStatus';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAdBCvhV_RinMaCyH0xs2yWYvFZ1t_rmCM";
 
@@ -27,8 +28,8 @@ const getBusMarkerIcon = (isLive) => {
   const hasMaps = typeof window !== 'undefined' && window.google && window.google.maps;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: hasMaps ? new window.google.maps.Size(60, 60) : null,
-    anchor: hasMaps ? new window.google.maps.Point(30, 30) : null
+    scaledSize: hasMaps ? new window.google.maps.Size(60, 60) : undefined,
+    anchor: hasMaps ? new window.google.maps.Point(30, 30) : undefined
   };
 };
 
@@ -44,11 +45,11 @@ export default function BusMap({ busData }) {
 
   const rawLat = Number(busData?.latitude);
   const rawLng = Number(busData?.longitude);
+  const hasValidCoords = isValidCoordinate(rawLat, rawLng);
 
-  const latitude = (!isNaN(rawLat) && rawLat !== 0) ? rawLat : 17.4399; // Default Hyderabad coordinates
-  const longitude = (!isNaN(rawLng) && rawLng !== 0) ? rawLng : 78.4983;
+  const latitude = hasValidCoords ? rawLat : 17.4399; // Default Hyderabad fallback
+  const longitude = hasValidCoords ? rawLng : 78.4983;
   const isLive = busData?.status === 'LIVE';
-  const isStale = isLive && Boolean(busData?.lastUpdated) && ((busData?.lastUpdated || 0) < (busData?.lastUpdatedCheck || 0)); // Managed via lastUpdated state
   const center = { lat: latitude, lng: longitude };
 
   const onLoad = useCallback((mapInstance) => {

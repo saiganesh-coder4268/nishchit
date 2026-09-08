@@ -21,6 +21,7 @@ export default function Button({
   type = 'button',
   onClick,
   disabledReason,
+  loadingText,
   ...props
 }) {
   const isClickDisabled = disabled || loading;
@@ -71,7 +72,7 @@ export default function Button({
       {loading ? (
         <span className="btn-spinner-wrapper">
           <span className="btn-spinner" aria-hidden="true" />
-          <span>Processing...</span>
+          <span>{loadingText || 'Processing...'}</span>
         </span>
       ) : (
         <>

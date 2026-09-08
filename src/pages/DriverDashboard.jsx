@@ -4,10 +4,11 @@ import DriverVerificationCard from '../components/DriverVerificationCard';
 import CommunicationPanel from '../components/CommunicationPanel';
 import { Button, StatusIndicator, ConfirmDialog, QuickMessageButton } from '../components/ui';
 import { subscribeBusState, updateBusState } from '../utils/busSync';
+import { getDriverTrackingStatus } from '../utils/busStatus';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  Play, Square, WifiOff, AlertTriangle, 
+  Play, Square, AlertTriangle, 
   ToggleLeft, ToggleRight, MessageSquare, Zap, Clock 
 } from 'lucide-react';
 
@@ -37,7 +38,6 @@ export default function DriverDashboard() {
   });
 
   const [gpsError, setGpsError] = useState(null);
-  const [isConnected, setIsConnected] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [showCommPanel, setShowCommPanel] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -142,7 +142,7 @@ export default function DriverDashboard() {
     demoIntervalRef.current = setInterval(pushDemoPoint, 3500);
   };
 
-  // START BUS handler with visual progress state
+  // START BUS handler with deterministic 8s timeout Promise
   const handleStartBus = async () => {
     if (!currentUser) {
       setGpsError("AUTHENTICATION ERROR: User session not found. Please log in again.");
@@ -174,51 +174,84 @@ export default function DriverDashboard() {
       }
 
       if (!navigator.geolocation) {
-        setGpsError("Browser GPS not supported. Switch to DEMO ROUTE.");
+        setGpsError("Browser GPS not supported on this device. Please switch to DEMO ROUTE mode.");
         setIsStarting(false);
         return;
       }
 
-      const options = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+      // Wrap initial location fix & start state write in an 8-second maximum timeout Promise
+      const acquireInitialFix = new Promise((resolve, reject) => {
+        let options = { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 };
 
-      const handleSuccess = (position) => {
-        if (!position || !position.coords) return;
-        const { latitude, longitude, accuracy } = position.coords;
-        const nLat = Number(latitude);
-        const nLng = Number(longitude);
+        const handleSuccess = async (position) => {
+          if (!position || !position.coords) {
+            reject(new Error("Invalid GPS position data received."));
+            return;
+          }
+          const { latitude, longitude, accuracy } = position.coords;
+          const nLat = Number(latitude);
+          const nLng = Number(longitude);
 
-        if (isNaN(nLat) || isNaN(nLng)) return;
+          if (isNaN(nLat) || isNaN(nLng)) {
+            reject(new Error("Invalid coordinate values received."));
+            return;
+          }
 
-        updateBusState(busId, {
-          status: 'LIVE',
-          latitude: nLat,
-          longitude: nLng,
-          accuracy: Math.round(accuracy || 0),
-          lastUpdated: position.timestamp || Date.now(),
-          startedAt: busData.startedAt || startTime,
-          isDemoMode: false,
-          driverId: currentUser?.driverId || 'DRV001',
-          driverName: currentUser?.name || 'Rajesh Kumar'
-        });
-      };
+          try {
+            await updateBusState(busId, {
+              status: 'LIVE',
+              latitude: nLat,
+              longitude: nLng,
+              accuracy: Math.round(accuracy || 0),
+              lastUpdated: position.timestamp || Date.now(),
+              startedAt: busData.startedAt || startTime,
+              isDemoMode: false,
+              driverId: currentUser?.driverId || 'DRV001',
+              driverName: currentUser?.name || 'Rajesh Kumar'
+            });
 
-      const handleError = (err) => {
-        let errorMsg = "Unable to fetch GPS. Switch to DEMO ROUTE mode.";
-        if (err.code === 1) errorMsg = "Location access denied. Please allow GPS permissions.";
-        setGpsError(errorMsg);
+            // Start continuous watch position
+            watchIdRef.current = navigator.geolocation.watchPosition(
+              (pos) => {
+                if (pos && pos.coords) {
+                  updateBusState(busId, {
+                    status: 'LIVE',
+                    latitude: Number(pos.coords.latitude),
+                    longitude: Number(pos.coords.longitude),
+                    accuracy: Math.round(pos.coords.accuracy || 0),
+                    lastUpdated: pos.timestamp || Date.now()
+                  });
+                }
+              },
+              (wErr) => console.warn("WatchPosition warning:", wErr),
+              { enableHighAccuracy: true, maximumAge: 3000 }
+            );
 
-        updateBusState(busId, {
-          status: 'LIVE',
-          lastUpdated: Date.now(),
-          startedAt: busData.startedAt || startTime,
-          isDemoMode: false
-        });
-      };
+            resolve(true);
+          } catch (e) {
+            reject(e);
+          }
+        };
 
-      navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
-      watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+        const handleError = (err) => {
+          let errorMsg = "Unable to fetch GPS. Switch to DEMO ROUTE mode.";
+          if (err.code === 1) errorMsg = "Location access denied. Please allow GPS permissions.";
+          else if (err.code === 2) errorMsg = "Position unavailable. Please check GPS connection.";
+          else if (err.code === 3) errorMsg = "GPS request timed out. Retrying or switch to DEMO ROUTE.";
+          reject(new Error(errorMsg));
+        };
 
+        navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("GPS fix acquisition timed out after 8 seconds. Please check device location settings or switch to DEMO ROUTE.")), 8500)
+      );
+
+      await Promise.race([acquireInitialFix, timeoutPromise]);
       await sendQuickBroadcast("Trip Started", `🚌 Trip Started: ${busData.busNumber || 'Bus 24'} is now LIVE on route.`);
+    } catch (err) {
+      setGpsError(err.message || "Failed to start trip. Please try again or switch to DEMO ROUTE.");
     } finally {
       setIsStarting(false);
     }
@@ -280,6 +313,8 @@ export default function DriverDashboard() {
   const isCompleted = busData.status === 'COMPLETED';
   const isNotStarted = !isLive && !isCompleted;
 
+  const trackingInfo = getDriverTrackingStatus(busData, isStarting, gpsError, now);
+
   const quickMessages = [
     { label: "Traffic delay", text: "Heavy traffic near main junction. Expect slight delay." },
     { label: "Running late", text: "Bus is running about 10 minutes late today." },
@@ -291,14 +326,6 @@ export default function DriverDashboard() {
   return (
     <div className="driver-dashboard-page">
       <div className="dashboard-container">
-
-        {/* Offline Banner */}
-        {!isConnected && (
-          <div className="offline-banner">
-            <WifiOff size={18} />
-            <span>Connection temporarily offline. Local sync active.</span>
-          </div>
-        )}
 
         {/* GPS Error Alert */}
         {gpsError && (
@@ -333,16 +360,16 @@ export default function DriverDashboard() {
           <div className="state-summary-row">
             {isNotStarted && (
               <StatusIndicator 
-                status="NOT_STARTED" 
-                label="BUS READY"
-                subtext="Trip ready to depart"
+                status={isStarting ? "PENDING" : "NOT_STARTED"} 
+                label={trackingInfo.label}
+                subtext={trackingInfo.subtext}
               />
             )}
 
             {isLive && (
               <div className="state-info">
-                <StatusIndicator status="LIVE" label="LIVE" />
-                <span className="state-sub">Location sharing active</span>
+                <StatusIndicator status="LIVE" label={trackingInfo.label} />
+                <span className="state-sub">{trackingInfo.subtext}</span>
                 <span className="last-update-text">
                   <Clock size={14} /> Last update: {getRelativeTime(busData.lastUpdated)}
                 </span>
@@ -365,12 +392,13 @@ export default function DriverDashboard() {
                 variant="success"
                 size="huge"
                 loading={isStarting}
-                disabled={!isVerified || !hasAssignedBus}
+                loadingText="Starting trip..."
+                disabled={!isVerified || !hasAssignedBus || isStarting}
                 disabledReason={!hasAssignedBus ? "No assigned bus" : !isVerified ? "Driver pending verification" : undefined}
                 onClick={handleStartBus}
                 icon={Play}
               >
-                {isStarting ? 'STARTING BUS...' : 'START BUS'}
+                START BUS
               </Button>
             )}
 

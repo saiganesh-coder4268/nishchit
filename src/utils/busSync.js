@@ -97,9 +97,15 @@ export async function updateBusState(busId = 'BUS24', patchObj) {
 
   lastWriteTimeMap[busId] = now;
 
-  // Update Firebase Realtime Database
+  // Update Firebase Realtime Database with a 4-second maximum timeout race
+  const firebasePromise = update(ref(database, `buses/${busId}`), newState);
+  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('TIMEOUT'), 4000));
+
   try {
-    await update(ref(database, `buses/${busId}`), newState);
+    const res = await Promise.race([firebasePromise, timeoutPromise]);
+    if (res === 'TIMEOUT') {
+      console.warn("Firebase update timed out after 4s; relying on local sync fallback.");
+    }
   } catch (err) {
     console.warn("Firebase update warning (using local sync fallback):", err);
   }
@@ -109,9 +115,9 @@ export async function updateBusState(busId = 'BUS24', patchObj) {
 
 // Subscribe to Bus State (Parent & Driver Viewers)
 export function subscribeBusState(busId = 'BUS24', callback) {
-  // 1. Send immediate cached local state
+  // 1. Send immediate cached local state (tagged as cached)
   const initialLocal = getStoredBusState(busId);
-  callback(initialLocal);
+  callback({ ...initialLocal, isCached: true });
 
   // 2. Firebase Realtime Listener
   let fbUnsubscribe = () => {};
@@ -127,7 +133,7 @@ export function subscribeBusState(busId = 'BUS24', callback) {
             delete remoteData.longitude;
           }
         }
-        const merged = { ...getStoredBusState(busId), ...remoteData };
+        const merged = { ...getStoredBusState(busId), ...remoteData, isCached: false };
         saveStoredBusState(busId, merged);
         callback(merged);
       }

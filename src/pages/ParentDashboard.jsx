@@ -4,11 +4,12 @@ import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
 import { Button, StatusIndicator } from '../components/ui';
 import { subscribeBusState } from '../utils/busSync';
-import { ref, onValue, push } from 'firebase/database';
+import { getParentStatusInfo } from '../utils/busStatus';
+import { ref, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
   MessageSquare, AlertCircle, 
-  MapPin, CheckCircle2, WifiOff, X, Navigation 
+  MapPin, CheckCircle2, X, Navigation 
 } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -26,7 +27,6 @@ export default function ParentDashboard() {
     isDemoMode: false
   });
 
-  const [isConnected, setIsConnected] = useState(true);
   const [showCommPanel, setShowCommPanel] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('Bus hasn\'t moved');
@@ -41,15 +41,6 @@ export default function ParentDashboard() {
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Check Firebase Connection State
-  useEffect(() => {
-    const connRef = ref(database, '.info/connected');
-    const unsubscribe = onValue(connRef, (snap) => {
-      setIsConnected(snap.val() === true);
-    });
-    return () => unsubscribe();
   }, []);
 
   // Listen to Bus State updates via Realtime DB + Local Sync Channel
@@ -86,27 +77,7 @@ export default function ParentDashboard() {
     }
   };
 
-  const getRelativeTime = (ts) => {
-    if (!ts) return 'Never';
-    const diffMs = Math.max(0, now - ts);
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 10) return '8 seconds ago';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin === 1) return '1 minute ago';
-    if (diffMin < 60) return `${diffMin} minutes ago`;
-    const diffHours = Math.floor(diffMin / 60);
-    return `${diffHours} hours ago`;
-  };
-
-  const isLive = busData.status === 'LIVE';
-  const isCompleted = busData.status === 'COMPLETED';
-  const isNotStarted = !isLive && !isCompleted;
-  
-  // Stale threshold: 2 minutes (120,000ms) without updates during a live trip
-  const STALE_THRESHOLD_MS = 2 * 60 * 1000;
-  const isStale = isLive && Boolean(busData.lastUpdated) && (now - busData.lastUpdated > STALE_THRESHOLD_MS);
-
+  const statusInfo = getParentStatusInfo(busData, now);
   const busNumberText = busData.busNumber || 'BUS 24';
   const routeNumberText = busData.routeNumber || 'ROUTE 04';
 
@@ -118,14 +89,6 @@ export default function ParentDashboard() {
     <div className="parent-dashboard-page">
       <div className="dashboard-container">
 
-        {/* Offline Banner */}
-        {!isConnected && (
-          <div className="offline-banner">
-            <WifiOff size={18} />
-            <span>Connection temporarily offline. Showing last known coordinates.</span>
-          </div>
-        )}
-
         {/* Top Status & Information Panel */}
         <div className="parent-status-panel">
           <div className="status-identity">
@@ -135,34 +98,14 @@ export default function ParentDashboard() {
             </div>
 
             <div className="status-indicator-group">
-              {isStale && <StatusIndicator status="STALE" label="LOCATION MAY BE OUTDATED" />}
-              {!isStale && isLive && <StatusIndicator status="LIVE" label="LIVE" />}
-              {isNotStarted && <StatusIndicator status="NOT_STARTED" label="NOT STARTED" />}
-              {isCompleted && <StatusIndicator status="COMPLETED" label="TRIP COMPLETED" />}
+              <StatusIndicator status={statusInfo.status} label={statusInfo.title} />
             </div>
           </div>
 
           <div className="status-subtitle-row">
-            {isStale && (
-              <p className="subtitle-text text-stale">
-                Last updated {getRelativeTime(busData.lastUpdated)}. Coordinates may not reflect exact live movement.
-              </p>
-            )}
-            {!isStale && isLive && (
-              <p className="subtitle-text">
-                Last updated {getRelativeTime(busData.lastUpdated)}
-              </p>
-            )}
-            {isNotStarted && (
-              <p className="subtitle-text">
-                Your bus hasn't started its trip yet.
-              </p>
-            )}
-            {isCompleted && (
-              <p className="subtitle-text">
-                Today's bus trip has ended.
-              </p>
-            )}
+            <p className={`subtitle-text ${statusInfo.status === 'STALE' ? 'text-stale' : ''}`}>
+              {statusInfo.subtitle}
+            </p>
           </div>
         </div>
 
