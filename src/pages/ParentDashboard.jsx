@@ -9,7 +9,7 @@ import { ref, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
   MessageSquare, AlertCircle, 
-  MapPin, CheckCircle2, X, Navigation, User
+  MapPin, CheckCircle2, X, Navigation 
 } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -77,77 +77,90 @@ export default function ParentDashboard() {
     }
   };
 
+  const [focusNotice, setFocusNotice] = useState(null);
+
   const statusInfo = getParentStatusInfo(busData, now);
   const isLive = statusInfo.status === 'LIVE';
-  const isStale = statusInfo.status === 'STALE';
   const busNumberText = busData.busNumber || 'BUS 24';
   const routeNumberText = busData.routeNumber || 'ROUTE 04';
-  const driverName = busData.driverName || 'Rajesh Kumar';
+
+  const getToolbarLabel = () => {
+    if (statusInfo.status === 'LIVE') return 'Live Tracking Active';
+    if (statusInfo.status === 'STALE') return 'Last Known Position';
+    if (statusInfo.status === 'UNAVAILABLE') return 'Location Stream Interrupted';
+    if (statusInfo.status === 'COMPLETED') return 'Trip Completed — Final Position';
+    return 'Bus Depot / Parked';
+  };
 
   const handleFocusBus = () => {
+    if (statusInfo.status === 'NOT_STARTED') {
+      setFocusNotice("Bus has not started today's trip yet.");
+      setTimeout(() => setFocusNotice(null), 3000);
+      return;
+    }
+    if (statusInfo.status === 'UNAVAILABLE' && !busData?.latitude) {
+      setFocusNotice("Bus location is currently unavailable.");
+      setTimeout(() => setFocusNotice(null), 3000);
+      return;
+    }
+    setFocusNotice(null);
     setFocusTrigger((prev) => prev + 1);
   };
 
   return (
-    <div className="parent-observer-page">
-      <div className="observer-container">
+    <div className="parent-dashboard-page">
+      <div className="dashboard-container">
 
-        {/* 1. BUS STATUS HEADER (Observer Viewport Summary) */}
-        <div className="observer-status-panel">
-          <div className="observer-identity-row">
-            <div className="observer-bus-titles">
-              <h1 className="observer-bus-number">{busNumberText}</h1>
-              <span className="observer-route-badge">{routeNumberText}</span>
+        {/* Top Status & Information Panel */}
+        <div className="parent-status-panel">
+          <div className="status-identity">
+            <div className="bus-identifiers">
+              <span className="bus-number-title">{busNumberText}</span>
+              <span className="route-badge">{routeNumberText}</span>
             </div>
 
-            <div className="observer-status-indicator">
+            <div className="status-indicator-group">
               <StatusIndicator status={statusInfo.status} label={statusInfo.title} />
             </div>
           </div>
 
-          <div className="observer-status-subrow">
-            <p className={`observer-subtitle ${isStale ? 'text-warning' : ''}`}>
+          <div className="status-subtitle-row">
+            <p className={`subtitle-text ${statusInfo.status === 'STALE' ? 'text-stale' : ''}`}>
               {statusInfo.subtitle}
             </p>
           </div>
         </div>
 
-        {/* 2. DOMINANT GOOGLE MAP VIEWPORT */}
-        <div className="observer-map-container">
-          <div className="map-view-header">
-            <div className="map-view-title">
+        {/* Centerpiece Google Map Container */}
+        <div className="parent-map-section">
+          <div className="map-toolbar">
+            <div className="map-toolbar-info">
               <MapPin size={16} />
-              <span>{isLive ? 'Live Tracking Map' : 'Bus Location Map'}</span>
+              <span>{getToolbarLabel()}</span>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleFocusBus}
-              icon={Navigation}
-            >
-              Focus Bus Marker
-            </Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {focusNotice && (
+                <span style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600 }}>{focusNotice}</span>
+              )}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleFocusBus}
+                icon={Navigation}
+              >
+                View / Focus Bus
+              </Button>
+            </div>
           </div>
 
-          <div className="observer-map-viewport">
+          <div className="map-frame">
             <BusMap busData={busData} key={focusTrigger} />
-          </div>
-
-          {/* Map Footer Metadata: Driver info */}
-          <div className="observer-map-footer">
-            <div className="driver-info-item">
-              <User size={15} />
-              <span>Assigned Driver: <strong>{driverName}</strong></span>
-            </div>
-            <div className="route-info-item">
-              <span>Bus Registration: <strong>TS 09 UB 2424</strong></span>
-            </div>
           </div>
         </div>
 
-        {/* 3. SECONDARY SUPPORT ACTIONS */}
-        <div className="observer-actions-bar">
+        {/* Secondary Actions Bar */}
+        <div className="parent-actions-bar">
           <Button
             variant="outline"
             onClick={() => setShowCommPanel(!showCommPanel)}
@@ -175,6 +188,8 @@ export default function ParentDashboard() {
             />
           </div>
         )}
+
+
 
         {/* Report Issue Modal */}
         {showReportModal && (
@@ -231,3 +246,5 @@ export default function ParentDashboard() {
     </div>
   );
 }
+
+

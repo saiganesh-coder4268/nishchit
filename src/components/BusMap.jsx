@@ -42,6 +42,13 @@ export default function BusMap({ busData }) {
 
   const [map, setMap] = useState(null);
   const [showInfoWindow, setShowInfoWindow] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Continuous freshness ticker
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const rawLat = Number(busData?.latitude);
   const rawLng = Number(busData?.longitude);
@@ -49,9 +56,15 @@ export default function BusMap({ busData }) {
 
   const latitude = hasValidCoords ? rawLat : 17.4399; // Default Hyderabad fallback
   const longitude = hasValidCoords ? rawLng : 78.4983;
-  const freshness = calculateLocationFreshness(busData);
-  const isLive = busData?.status === 'LIVE';
-  const isStale = freshness === 'STALE';
+  const freshness = calculateLocationFreshness(busData, now);
+  const tripStatus = busData?.status || 'NOT_STARTED';
+
+  const isFreshLive = tripStatus === 'LIVE' && freshness === 'LIVE';
+  const isStale = tripStatus === 'LIVE' && freshness === 'STALE';
+  const isUnavailable = tripStatus === 'LIVE' && freshness === 'UNAVAILABLE';
+  const isCompleted = tripStatus === 'COMPLETED';
+  const isNotStarted = tripStatus === 'NOT_STARTED';
+
   const center = { lat: latitude, lng: longitude };
 
   const onLoad = useCallback((mapInstance) => {
@@ -70,7 +83,7 @@ export default function BusMap({ busData }) {
   }, [map, latitude, longitude]);
 
   const formatTime = (ts) => {
-    if (!ts) return 'Just now';
+    if (!ts) return 'No timestamp';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
@@ -93,6 +106,22 @@ export default function BusMap({ busData }) {
     );
   }
 
+  const getStatusText = () => {
+    if (isFreshLive) return '🟢 Live Google Maps Tracking';
+    if (isStale) return '⚠️ Last Known Position (Location Stale)';
+    if (isUnavailable) return '⚠️ Location Stream Interrupted';
+    if (isCompleted) return '🏁 Trip Completed — Final Position';
+    return '🅿️ Trip Not Started — Bus Parked';
+  };
+
+  const getStatusStyles = () => {
+    if (isFreshLive) return { background: '#ecfdf5', color: '#065f46' };
+    if (isStale) return { background: '#fffbeb', color: '#b45309' };
+    if (isUnavailable) return { background: '#fef2f2', color: '#991b1b' };
+    if (isCompleted) return { background: '#f1f5f9', color: '#334155' };
+    return { background: '#f1f5f9', color: '#475569' };
+  };
+
   return (
     <div className="bus-map-wrapper">
       <GoogleMap
@@ -110,7 +139,7 @@ export default function BusMap({ busData }) {
       >
         <MarkerF
           position={center}
-          icon={getBusMarkerIcon(isLive)}
+          icon={getBusMarkerIcon(isFreshLive)}
           onClick={() => setShowInfoWindow(!showInfoWindow)}
         >
           {showInfoWindow && (
@@ -118,7 +147,7 @@ export default function BusMap({ busData }) {
               position={center}
               onCloseClick={() => setShowInfoWindow(false)}
             >
-              <div className="popup-content" style={{ fontFamily: 'Inter, sans-serif', padding: '4px', minWidth: '200px' }}>
+              <div className="popup-content" style={{ fontFamily: 'Inter, sans-serif', padding: '4px', minWidth: '210px' }}>
                 <div className="popup-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
                   <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{busData?.busNumber || 'Bus 24'}</strong>
                   <span className="popup-route" style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
@@ -136,15 +165,21 @@ export default function BusMap({ busData }) {
                     <Clock size={14} color="#64748b" />
                     <span>Last Updated: <strong>{formatTime(busData?.lastUpdated)}</strong></span>
                   </div>
-
-                  <div className="popup-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={14} color="#2563eb" />
-                    <span>Coords: {latitude.toFixed(4)}, {longitude.toFixed(4)}</span>
-                  </div>
                 </div>
 
-                <div className="popup-status" style={{ marginTop: '8px', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', background: isStale ? '#fffbebfb' : isLive ? '#ecfdf5' : '#f1f5f9', color: isStale ? '#b45309' : isLive ? '#065f46' : '#64748b' }}>
-                  {isStale ? 'Location Not Updated Recently' : isLive ? 'Live Location Active' : 'Bus Parked / Not Started'}
+                <div
+                  className="popup-status"
+                  style={{
+                    marginTop: '8px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    ...getStatusStyles()
+                  }}
+                >
+                  {getStatusText()}
                 </div>
               </div>
             </InfoWindowF>
