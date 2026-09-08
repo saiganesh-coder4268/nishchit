@@ -1,122 +1,89 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import LandingPage from './pages/LandingPage';
+import DriverLogin from './pages/DriverLogin';
+import ParentLogin from './pages/ParentLogin';
+import DriverDashboard from './pages/DriverDashboard';
+import ParentDashboard from './pages/ParentDashboard';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const navigate = useNavigate();
+
+  const handleQuickLogin = (role) => {
+    if (role === 'driver') {
+      const demoDriver = {
+        uid: 'demo-driver-1',
+        name: 'Rajesh Kumar',
+        email: 'driver@nishchit.app',
+        role: 'driver',
+        driverId: 'DRV001',
+        busId: 'BUS24',
+        routeId: 'ROUTE04',
+        verificationStatus: 'VERIFIED',
+      };
+      setCurrentUser(demoDriver);
+      navigate('/driver/dashboard');
+    } else {
+      const demoParent = {
+        uid: 'demo-parent-1',
+        name: 'Demo Parent',
+        email: 'parent@nishchit.app',
+        role: 'parent',
+        studentName: 'Aarav',
+        studentClass: 'Class 8-A',
+        busId: 'BUS24',
+        routeId: 'ROUTE04',
+      };
+      setCurrentUser(demoParent);
+      navigate('/parent/dashboard');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    navigate('/');
+  };
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      <Navbar currentUser={currentUser} onLogout={handleLogout} />
+      <main className="main-content">
+        <Routes>
+          <Route
+            path="/"
+            element={<LandingPage onQuickLogin={handleQuickLogin} />}
+          />
+          <Route
+            path="/driver/login"
+            element={<DriverLogin onQuickLogin={() => handleQuickLogin('driver')} />}
+          />
+          <Route
+            path="/parent/login"
+            element={<ParentLogin onQuickLogin={() => handleQuickLogin('parent')} />}
+          />
+          <Route
+            path="/driver/dashboard"
+            element={<DriverDashboard currentUser={currentUser} />}
+          />
+          <Route
+            path="/parent/dashboard"
+            element={<ParentDashboard currentUser={currentUser} />}
+          />
+        </Routes>
+      </main>
+      <Footer />
     </>
-  )
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
+  );
+}
