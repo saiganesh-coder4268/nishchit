@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, Lock, Mail, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function DriverLogin() {
   const { currentUser, loginWithCredentials, signupWithCredentials, quickDemoLogin } = useAuth();
@@ -40,7 +40,7 @@ export default function DriverLogin() {
           driverId: 'DRV-' + Math.floor(1000 + Math.random() * 9000),
           busId: 'BUS24',
           routeId: 'ROUTE04',
-          verificationStatus: 'PENDING' // New driver registrations require institution review
+          verificationStatus: 'PENDING'
         });
       } else {
         await loginWithCredentials(email, password, 'driver');
@@ -62,34 +62,32 @@ export default function DriverLogin() {
   return (
     <div className="auth-page">
       <div className="auth-container">
-        <div className="auth-header driver">
-          <div className="auth-icon driver">
-            <Bus size={32} />
-          </div>
-          <h1>Driver Portal Login</h1>
-          <p>School Transport Live GPS & Communications</p>
+        <div className="auth-brand-badge">NISHCHIT</div>
+
+        <div className="auth-header">
+          <h1>{isSignUp ? 'Driver Registration' : 'Driver Sign In'}</h1>
+          <p>Access your assigned bus and trip controls.</p>
         </div>
 
-        {/* Demo Shortcut Card */}
+        {/* Quick Demo Shortcut */}
         <div className="auth-demo-box">
           <div className="demo-box-content">
-            <span className="demo-badge">Instant Demo Access</span>
+            <span className="demo-badge">Demo Shortcut</span>
             <strong>Driver: Rajesh Kumar</strong>
-            <span className="demo-sub">Bus 24 · Route 04 · Verified ✓</span>
           </div>
 
           <button
             type="button"
             onClick={handleDemoLogin}
-            className="btn btn-primary btn-sm"
+            className="btn btn-outline btn-sm"
           >
-            One-Tap Demo Login
+            Instant Demo Login
           </button>
         </div>
 
         {error && (
           <div className="auth-error-banner">
-            <AlertCircle size={18} />
+            <AlertCircle size={16} />
             <span>{error}</span>
           </div>
         )}
@@ -99,72 +97,59 @@ export default function DriverLogin() {
             <>
               <div className="form-group">
                 <label>Full Name</label>
-                <div className="input-icon-wrapper">
-                  <User size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rajesh Kumar"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Full Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </div>
 
               <div className="form-group">
                 <label>Mobile Number</label>
-                <div className="input-icon-wrapper">
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+91 98765 43210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </div>
+                <input
+                  type="tel"
+                  required
+                  placeholder="+91 98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
               </div>
 
               <div className="form-group">
-                <label>Driving Licence Number</label>
-                <div className="input-icon-wrapper">
-                  <input
-                    type="text"
-                    required
-                    placeholder="DL-1420110012345"
-                    value={licenceNumber}
-                    onChange={(e) => setLicenceNumber(e.target.value)}
-                  />
-                </div>
+                <label>Licence Number</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="DL-1420110012345"
+                  value={licenceNumber}
+                  onChange={(e) => setLicenceNumber(e.target.value)}
+                />
               </div>
             </>
           )}
 
           <div className="form-group">
-            <label>Email Address</label>
-            <div className="input-icon-wrapper">
-              <Mail size={18} className="input-icon" />
-              <input
-                type="email"
-                required
-                placeholder="driver@nishchit.app"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <label>Email</label>
+            <input
+              type="email"
+              required
+              placeholder="driver@nishchit.app"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
 
           <div className="form-group">
             <label>Password</label>
-            <div className="input-icon-wrapper">
-              <Lock size={18} className="input-icon" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <input
+              type="password"
+              required
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
           <button
@@ -172,24 +157,23 @@ export default function DriverLogin() {
             disabled={loading}
             className="btn btn-primary btn-full"
           >
-            {loading ? 'Authenticating...' : isSignUp ? 'CREATE DRIVER ACCOUNT' : 'LOGIN TO DRIVER DASHBOARD'}
-            <ArrowRight size={18} />
+            {loading ? 'Signing In...' : isSignUp ? 'Create Driver Account' : 'Sign In'}
           </button>
         </form>
 
         <div className="auth-toggle-footer">
           {isSignUp ? (
             <p>
-              Already registered?{' '}
+              Already have an account?{' '}
               <button type="button" onClick={() => setIsSignUp(false)} className="btn-link">
-                Log In Here
+                Sign In
               </button>
             </p>
           ) : (
             <p>
               New driver?{' '}
               <button type="button" onClick={() => setIsSignUp(true)} className="btn-link">
-                Create Driver Account
+                Create Account
               </button>
             </p>
           )}
@@ -198,3 +182,4 @@ export default function DriverLogin() {
     </div>
   );
 }
+

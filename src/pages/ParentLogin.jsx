@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserCheck, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function ParentLogin() {
   const { currentUser, loginWithCredentials, signupWithCredentials, quickDemoLogin } = useAuth();
@@ -60,34 +60,32 @@ export default function ParentLogin() {
   return (
     <div className="auth-page">
       <div className="auth-container">
-        <div className="auth-header parent">
-          <div className="auth-icon parent">
-            <UserCheck size={32} />
-          </div>
-          <h1>Parent Portal Login</h1>
-          <p>Live Bus Visibility & Direct Driver Connection</p>
+        <div className="auth-brand-badge">NISHCHIT</div>
+
+        <div className="auth-header">
+          <h1>{isSignUp ? 'Parent Registration' : 'Parent Sign In'}</h1>
+          <p>Track your child's bus in real time.</p>
         </div>
 
-        {/* Demo Shortcut Card */}
-        <div className="auth-demo-box parent">
+        {/* Quick Demo Shortcut */}
+        <div className="auth-demo-box">
           <div className="demo-box-content">
-            <span className="demo-badge parent">Instant Demo Access</span>
-            <strong>Student: Aarav (Class 8-A)</strong>
-            <span className="demo-sub">Bus 24 · Route 04</span>
+            <span className="demo-badge">Demo Shortcut</span>
+            <strong>Parent: Aarav's Parent</strong>
           </div>
 
           <button
             type="button"
             onClick={handleDemoLogin}
-            className="btn btn-success btn-sm"
+            className="btn btn-outline btn-sm"
           >
-            One-Tap Demo Login
+            Instant Demo Login
           </button>
         </div>
 
         {error && (
           <div className="auth-error-banner">
-            <AlertCircle size={18} />
+            <AlertCircle size={16} />
             <span>{error}</span>
           </div>
         )}
@@ -96,97 +94,84 @@ export default function ParentLogin() {
           {isSignUp && (
             <>
               <div className="form-group">
-                <label>Parent Full Name</label>
-                <div className="input-icon-wrapper">
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Demo Parent"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
+                <label>Parent Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Parent Full Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </div>
 
               <div className="form-group">
                 <label>Student Name</label>
-                <div className="input-icon-wrapper">
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Aarav"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                  />
-                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Child's Full Name"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                />
               </div>
 
               <div className="form-group">
-                <label>Student Class / Year</label>
-                <div className="input-icon-wrapper">
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Class 8-A"
-                    value={studentClass}
-                    onChange={(e) => setStudentClass(e.target.value)}
-                  />
-                </div>
+                <label>Student Class</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Class 8-A"
+                  value={studentClass}
+                  onChange={(e) => setStudentClass(e.target.value)}
+                />
               </div>
             </>
           )}
 
           <div className="form-group">
-            <label>Email Address</label>
-            <div className="input-icon-wrapper">
-              <Mail size={18} className="input-icon" />
-              <input
-                type="email"
-                required
-                placeholder="parent@nishchit.app"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <label>Email</label>
+            <input
+              type="email"
+              required
+              placeholder="parent@nishchit.app"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
 
           <div className="form-group">
             <label>Password</label>
-            <div className="input-icon-wrapper">
-              <Lock size={18} className="input-icon" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <input
+              type="password"
+              required
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-success btn-full"
+            className="btn btn-primary btn-full"
           >
-            {loading ? 'Authenticating...' : isSignUp ? 'CREATE PARENT ACCOUNT' : 'LOGIN TO PARENT DASHBOARD'}
-            <ArrowRight size={18} />
+            {loading ? 'Signing In...' : isSignUp ? 'Create Parent Account' : 'Sign In'}
           </button>
         </form>
 
         <div className="auth-toggle-footer">
           {isSignUp ? (
             <p>
-              Already registered?{' '}
+              Already have an account?{' '}
               <button type="button" onClick={() => setIsSignUp(false)} className="btn-link">
-                Log In Here
+                Sign In
               </button>
             </p>
           ) : (
             <p>
               New parent?{' '}
               <button type="button" onClick={() => setIsSignUp(true)} className="btn-link">
-                Register Parent Account
+                Create Account
               </button>
             </p>
           )}
@@ -195,3 +180,4 @@ export default function ParentLogin() {
     </div>
   );
 }
+
