@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import DriverVerificationCard from '../components/DriverVerificationCard';
 import CommunicationPanel from '../components/CommunicationPanel';
-import { ref, onValue, update, push } from 'firebase/database';
+import { subscribeBusState, updateBusState } from '../utils/busSync';
+import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
   Bus, MapPin, Play, Square, Navigation, AlertTriangle, 
@@ -56,12 +57,10 @@ export default function DriverDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Realtime Firebase DB Listener for Bus status
+  // Realtime DB & BroadcastChannel Sync Listener for Bus state
   useEffect(() => {
-    const busRef = ref(database, `buses/${busId}`);
-    const unsubscribe = onValue(busRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const val = snapshot.val();
+    const unsubscribe = subscribeBusState(busId, (val) => {
+      if (val) {
         setBusData(val);
         if (val.isDemoMode !== undefined) {
           setIsDemoMode(val.isDemoMode);
@@ -105,7 +104,7 @@ export default function DriverDashboard() {
     }
   };
 
-  // Start Demo Simulated Movement (Milestone 14)
+  // Start Demo Simulated Movement
   const startDemoRouteTracking = (now) => {
     stopAllTracking();
     demoStepRef.current = 0;
@@ -114,22 +113,24 @@ export default function DriverDashboard() {
       const point = DEMO_ROUTE_COORDS[demoStepRef.current % DEMO_ROUTE_COORDS.length];
       demoStepRef.current += 1;
 
-      update(ref(database, `buses/${busId}`), {
+      updateBusState(busId, {
         status: 'LIVE',
         latitude: point.lat,
         longitude: point.lng,
         accuracy: 5,
         lastUpdated: Date.now(),
         startedAt: busData.startedAt || now,
-        isDemoMode: true
-      }).catch(err => console.error("Demo location update error:", err));
+        isDemoMode: true,
+        driverId: currentUser?.driverId || 'DRV001',
+        driverName: currentUser?.name || 'Rajesh Kumar'
+      });
     };
 
     pushDemoPoint();
     demoIntervalRef.current = setInterval(pushDemoPoint, 3500); // Step every 3.5 seconds
   };
 
-  // START BUS handler (Milestones 6, 7, 12, 14)
+  // START BUS handler
   const handleStartBus = () => {
     if (!isVerified) {
       alert("Only verified drivers can start a trip.");
@@ -162,7 +163,7 @@ export default function DriverDashboard() {
       const { latitude, longitude, accuracy } = position.coords;
       const updateTime = Date.now();
 
-      update(ref(database, `buses/${busId}`), {
+      updateBusState(busId, {
         status: 'LIVE',
         latitude,
         longitude,
@@ -172,7 +173,7 @@ export default function DriverDashboard() {
         isDemoMode: false,
         driverId: currentUser?.driverId || 'DRV001',
         driverName: currentUser?.name || 'Rajesh Kumar'
-      }).catch(err => console.error(err));
+      });
     };
 
     const handleError = (err) => {
@@ -182,13 +183,12 @@ export default function DriverDashboard() {
       }
       setGpsError(errorMsg);
 
-      // Fallback update
-      update(ref(database, `buses/${busId}`), {
+      updateBusState(busId, {
         status: 'LIVE',
         lastUpdated: Date.now(),
         startedAt: busData.startedAt || now,
         isDemoMode: false
-      }).catch(e => console.error(e));
+      });
     };
 
     navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
@@ -203,11 +203,11 @@ export default function DriverDashboard() {
     stopAllTracking();
 
     const now = Date.now();
-    update(ref(database, `buses/${busId}`), {
+    updateBusState(busId, {
       status: 'COMPLETED',
       endedAt: now,
       lastUpdated: now
-    }).catch(err => console.error(err));
+    });
 
     broadcastAutoMessage("🏁 Trip Completed: Today's bus trip has arrived safely at school.");
   };
@@ -215,9 +215,9 @@ export default function DriverDashboard() {
   const toggleDemoMode = () => {
     const nextVal = !isDemoMode;
     setIsDemoMode(nextVal);
-    update(ref(database, `buses/${busId}`), {
+    updateBusState(busId, {
       isDemoMode: nextVal
-    }).catch(e => console.error(e));
+    });
   };
 
   const formatTime = (ts) => {
@@ -232,13 +232,13 @@ export default function DriverDashboard() {
   return (
     <div className="driver-dashboard-page">
       <div className="dashboard-container">
-        {/* Offline Warning (Milestone 13) */}
+        {/* Offline Warning */}
         {!isConnected && (
           <div className="gps-error-banner offline">
             <WifiOff size={20} />
             <div className="error-text">
               <strong>⚠️ CONNECTION LOST</strong>
-              <p>Location updates may be delayed. Reconnecting to network...</p>
+              <p>Location updates using local sync channel. Reconnecting to network...</p>
             </div>
           </div>
         )}
@@ -273,7 +273,6 @@ export default function DriverDashboard() {
                 {isDemoMode ? <ToggleRight size={22} color="#10b981" /> : <ToggleLeft size={22} color="#64748b" />}
                 <span>{isDemoMode ? 'DEMO MODE (ACTIVE)' : 'REAL GPS MODE'}</span>
               </button>
-
             </div>
 
             <div className="status-badge-container">
@@ -362,7 +361,7 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* Communication Drawer Panel (Milestone 11) */}
+        {/* Communication Drawer Panel */}
         {(showCommPanel || isLive) && (
           <div className="comm-panel-container">
             <CommunicationPanel

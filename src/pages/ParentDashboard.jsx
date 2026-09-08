@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
 import NishchitAssistant from '../components/NishchitAssistant';
+import { subscribeBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
@@ -45,15 +46,12 @@ export default function ParentDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Listen to Firebase Realtime DB updates
+  // Listen to Bus State updates via Realtime DB + Local Sync Channel
   useEffect(() => {
-    const busRef = ref(database, `buses/${busId}`);
-    const unsubscribe = onValue(busRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setBusData(snapshot.val());
+    const unsubscribe = subscribeBusState(busId, (val) => {
+      if (val) {
+        setBusData(val);
       }
-    }, (err) => {
-      console.error("Realtime listener error:", err);
     });
 
     return () => unsubscribe();
@@ -94,7 +92,7 @@ export default function ParentDashboard() {
   return (
     <div className="parent-dashboard-page">
       <div className="dashboard-container">
-        {/* Connection Offline Banner (Milestone 13) */}
+        {/* Connection Offline Banner */}
         {!isConnected && (
           <div className="gps-error-banner offline">
             <WifiOff size={20} />
@@ -134,80 +132,56 @@ export default function ParentDashboard() {
           </div>
         </div>
 
-        {/* Bus Status Card */}
+        {/* Bus Status & Interactive Leaflet Live Map Card */}
         <div className="card parent-status-card">
-          {/* IF BUS NOT STARTED */}
-          {isNotStarted && (
-            <div className="trip-state-box not-started">
-              <div className="state-header">
-                <span className="status-badge not-started">
-                  <span className="pulse-dot red" /> 🔴 BUS NOT STARTED
-                </span>
-              </div>
-              <h3>Your bus hasn't started yet.</h3>
-              <p>The live location map will appear automatically as soon as the driver starts the trip.</p>
+          {/* Header Banner depending on Status */}
+          <div className="state-header">
+            {isNotStarted && (
+              <span className="status-badge not-started">
+                <span className="pulse-dot red" /> 🔴 BUS NOT STARTED
+              </span>
+            )}
+            {isLive && (
+              <span className="status-badge live">
+                <span className="pulse-dot green" /> 🟢 BUS ON THE WAY {busData.isDemoMode ? '[DEMO MODE]' : ''}
+              </span>
+            )}
+            {isCompleted && (
+              <span className="status-badge completed">
+                <CheckCircle2 size={16} /> ⚪ TRIP COMPLETED
+              </span>
+            )}
+
+            <div className="live-update-indicator">
+              <Radio size={16} className={`pulse-ring ${isLive ? 'text-success' : 'text-muted'}`} />
+              <span>{isLive ? 'Realtime Tracking Active' : isCompleted ? 'Trip Completed' : 'Waiting for Driver'}</span>
             </div>
-          )}
+          </div>
 
-          {/* IF BUS IS LIVE */}
-          {isLive && (
-            <div className="trip-state-box live">
-              <div className="state-header">
-                <span className="status-badge live">
-                  <span className="pulse-dot green" /> 🟢 BUS ON THE WAY {busData.isDemoMode ? '[DEMO MODE]' : ''}
-                </span>
-                <div className="live-update-indicator">
-                  <Radio size={16} className="text-success pulse-ring" />
-                  <span>Realtime Tracking Active</span>
-                </div>
-              </div>
-
-              <div className="live-meta-row">
-                <div className="meta-box">
-                  <Clock size={16} className="text-muted" />
-                  <span>Started: <strong>{formatTime(busData.startedAt)}</strong></span>
-                </div>
-
-                <div className="meta-box">
-                  <RefreshCw size={16} className="text-muted" />
-                  <span>Last Updated: <strong>{formatTime(busData.lastUpdated)}</strong></span>
-                </div>
-
-                <div className="meta-box">
-                  <Bus size={16} className="text-primary" />
-                  <span><strong>{busData.busNumber || 'Bus 24'}</strong> · {busData.routeNumber || 'Route 04'}</span>
-                </div>
-              </div>
-
-              {/* Leaflet Live Map */}
-              <div className="parent-map-container">
-                <BusMap busData={busData} />
-              </div>
+          <div className="live-meta-row">
+            <div className="meta-box">
+              <Clock size={16} className="text-muted" />
+              <span>Started: <strong>{formatTime(busData.startedAt)}</strong></span>
             </div>
-          )}
 
-          {/* IF TRIP COMPLETED */}
-          {isCompleted && (
-            <div className="trip-state-box completed">
-              <div className="state-header">
-                <span className="status-badge completed">
-                  <CheckCircle2 size={16} /> ⚪ TRIP COMPLETED
-                </span>
-              </div>
-              <h3>Today's trip has ended.</h3>
-              <div className="completed-times">
-                <span>Trip Started: <strong>{formatTime(busData.startedAt)}</strong></span>
-                <span>Ended: <strong>{formatTime(busData.endedAt)}</strong></span>
-              </div>
-
-              <div className="parent-map-container completed-map">
-                <BusMap busData={busData} />
-              </div>
+            <div className="meta-box">
+              <RefreshCw size={16} className="text-muted" />
+              <span>Last Updated: <strong>{formatTime(busData.lastUpdated)}</strong></span>
             </div>
-          )}
+
+            <div className="meta-box">
+              <Bus size={16} className="text-primary" />
+              <span><strong>{busData.busNumber || 'Bus 24'}</strong> · {busData.routeNumber || 'Route 04'}</span>
+            </div>
+          </div>
+
+          {/* Leaflet Map - Prominently Displayed for Parents */}
+          <div className="parent-map-container">
+            <BusMap busData={busData} />
+          </div>
         </div>
 
-        {/* Realtime Driver-Parent Communication Drawer (Milestone 11) */}
+        {/* Realtime Driver-Parent Communication Drawer */}
         {showCommPanel && (
           <div className="comm-panel-container">
             <CommunicationPanel
@@ -218,10 +192,10 @@ export default function ParentDashboard() {
           </div>
         )}
 
-        {/* AI Assistant Widget */}
+        {/* AI Transport Assistant Widget */}
         <NishchitAssistant busData={busData} currentUser={currentUser} />
 
-        {/* Report Issue Modal (Milestone 15) */}
+        {/* Report Issue Modal */}
         {showReportModal && (
           <div className="modal-overlay">
             <div className="modal-content">
