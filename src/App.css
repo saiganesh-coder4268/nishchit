@@ -828,5 +828,231 @@
   text-align: center;
 }
 
+/* Bus Map & Leaflet Styles */
+.bus-map-wrapper {
+  width: 100%;
+  height: 420px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 1;
+}
+
+.leaflet-map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.bus-popup .leaflet-popup-content-wrapper {
+  border-radius: var(--radius-md);
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.bus-popup .leaflet-popup-content {
+  margin: 0;
+  padding: 14px 16px;
+  width: 230px !important;
+}
+
+.popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-family);
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.popup-header strong {
+  font-size: 1.05rem;
+  color: var(--color-secondary);
+}
+
+.popup-route {
+  background: #eff6ff;
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.popup-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+}
+
+.popup-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-main);
+}
+
+.popup-status {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.popup-status.live {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.popup-status.offline {
+  background: #f1f5f9;
+  color: var(--text-muted);
+}
+
+/* Parent Dashboard Page */
+.parent-dashboard-page {
+  padding: 32px 20px 60px;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.parent-info-card {
+  padding: 20px 24px;
+}
+
+.student-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.student-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: var(--color-live);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #a7f3d0;
+}
+
+.student-details h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--color-secondary);
+  line-height: 1.2;
+}
+
+.student-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.bus-assignment-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.parent-status-card {
+  padding: 24px;
+}
+
+.trip-state-box.not-started {
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.trip-state-box.not-started h3 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--color-secondary);
+  margin: 14px 0 8px;
+}
+
+.trip-state-box.not-started p {
+  color: var(--text-muted);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.trip-state-box.live .state-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.live-update-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #047857;
+}
+
+.live-meta-row {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.meta-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parent-map-container {
+  margin-top: 10px;
+}
+
+.trip-state-box.completed h3 {
+  margin-top: 10px;
+  font-size: 1.3rem;
+  color: var(--color-secondary);
+}
+
+.completed-times {
+  display: flex;
+  gap: 20px;
+  margin: 10px 0 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+
 
 
