@@ -68,7 +68,8 @@ export default function CommunicationPanel({ currentUser, busData, onClose }) {
     { label: "⚠️ Running Late", text: "Bus is running about 10 minutes late today." },
     { label: "🚧 Traffic Delay", text: "Heavy traffic near main junction. Expect slight delay." },
     { label: "🛑 Temporary Stop", text: "Bus stopped temporarily for safety check." },
-    { label: "📍 Be Ready", text: "Bus is approaching upcoming stop. Please be ready!" }
+    { label: "📍 Please Be Ready", text: "Bus is approaching upcoming stop. Please be ready!" },
+    { label: "🚨 Emergency", text: "Emergency update: Vehicle check in progress. All students safe." }
   ];
 
   const formatTime = (ts) => {
