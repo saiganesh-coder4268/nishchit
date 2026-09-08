@@ -174,14 +174,23 @@ export default function DriverDashboard() {
     };
 
     const handleSuccess = (position) => {
+      if (!position || !position.coords) return;
       const { latitude, longitude, accuracy } = position.coords;
-      const updateTime = Date.now();
+      const nLat = Number(latitude);
+      const nLng = Number(longitude);
+
+      if (isNaN(nLat) || isNaN(nLng) || nLat < -90 || nLat > 90 || nLng < -180 || nLng > 180) {
+        console.warn("Invalid GPS coordinates received:", latitude, longitude);
+        return;
+      }
+
+      const updateTime = position.timestamp || Date.now();
 
       updateBusState(busId, {
         status: 'LIVE',
-        latitude,
-        longitude,
-        accuracy: Math.round(accuracy),
+        latitude: nLat,
+        longitude: nLng,
+        accuracy: Math.round(accuracy || 0),
         lastUpdated: updateTime,
         startedAt: busData.startedAt || now,
         isDemoMode: false,
@@ -192,8 +201,12 @@ export default function DriverDashboard() {
 
     const handleError = (err) => {
       let errorMsg = "Unable to get GPS location. Switch to DEMO MODE to demonstrate route movement.";
-      if (err.code === 1) {
-        errorMsg = "Location access denied. Please allow location permissions or switch to DEMO MODE.";
+      if (err.code === 1) { // PERMISSION_DENIED
+        errorMsg = "Location access denied. Please allow browser location permissions or switch to DEMO MODE.";
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        errorMsg = "GPS location unavailable. Check device settings or switch to DEMO MODE.";
+      } else if (err.code === 3) { // TIMEOUT
+        errorMsg = "Location request timed out. Retrying GPS connection...";
       }
       setGpsError(errorMsg);
 

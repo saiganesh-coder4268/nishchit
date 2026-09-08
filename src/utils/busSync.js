@@ -3,6 +3,8 @@ import { database } from '../firebase';
 
 const CHANNEL_NAME = 'nishchit_bus_sync';
 const busChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
+const MIN_WRITE_INTERVAL_MS = 1500; // Throttle RTDB updates to max 1 per 1.5 seconds unless status/mode changes
+const lastWriteTimeMap = {};
 
 // Initial default bus state
 const DEFAULT_BUS_STATE = {
@@ -20,12 +22,23 @@ const DEFAULT_BUS_STATE = {
   isDemoMode: false
 };
 
+// Validate latitude & longitude bounds
+export function isValidCoordinate(lat, lng) {
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  if (isNaN(nLat) || isNaN(nLng)) return false;
+  if (nLat === 0 && nLng === 0) return false;
+  if (nLat < -90 || nLat > 90) return false;
+  if (nLng < -180 || nLng > 180) return false;
+  return true;
+}
+
 // Local storage helper
 export function getStoredBusState(busId = 'BUS24') {
   try {
     const raw = localStorage.getItem(`nishchit_bus_${busId}`);
     if (raw) return JSON.parse(raw);
-  } catch (e) {
+  } catch {
     // Ignore
   }
   return DEFAULT_BUS_STATE;
@@ -34,7 +47,7 @@ export function getStoredBusState(busId = 'BUS24') {
 export function saveStoredBusState(busId = 'BUS24', state) {
   try {
     localStorage.setItem(`nishchit_bus_${busId}`, JSON.stringify(state));
-  } catch (e) {
+  } catch {
     // Ignore
   }
 }
@@ -42,18 +55,47 @@ export function saveStoredBusState(busId = 'BUS24', state) {
 // Update Bus State (Driver Side)
 export async function updateBusState(busId = 'BUS24', patchObj) {
   const currentState = getStoredBusState(busId);
+  const now = Date.now();
+
+  // Validate coordinates if supplied in patch
+  const cleanPatch = { ...patchObj };
+  if (cleanPatch.latitude !== undefined || cleanPatch.longitude !== undefined) {
+    const checkLat = cleanPatch.latitude !== undefined ? cleanPatch.latitude : currentState.latitude;
+    const checkLng = cleanPatch.longitude !== undefined ? cleanPatch.longitude : currentState.longitude;
+    if (!isValidCoordinate(checkLat, checkLng)) {
+      console.warn("Invalid coordinates rejected in updateBusState:", cleanPatch.latitude, cleanPatch.longitude);
+      delete cleanPatch.latitude;
+      delete cleanPatch.longitude;
+    }
+  }
+
   const newState = {
     ...currentState,
-    ...patchObj,
-    lastUpdated: patchObj.lastUpdated || Date.now()
+    ...cleanPatch,
+    lastUpdated: cleanPatch.lastUpdated || now
   };
 
   saveStoredBusState(busId, newState);
 
   // Broadcast to other tabs locally
   if (busChannel) {
-    busChannel.postMessage({ type: 'BUS_UPDATE', busId, data: newState });
+    try {
+      busChannel.postMessage({ type: 'BUS_UPDATE', busId, data: newState });
+    } catch (e) {
+      console.warn("BroadcastChannel postMessage warning:", e);
+    }
   }
+
+  // Throttle Firebase Realtime Database writes to prevent excessive network spam
+  const lastWriteTime = lastWriteTimeMap[busId] || 0;
+  const isStatusChange = cleanPatch.status && cleanPatch.status !== currentState.status;
+  const isModeChange = cleanPatch.isDemoMode !== undefined && cleanPatch.isDemoMode !== currentState.isDemoMode;
+
+  if (!isStatusChange && !isModeChange && (now - lastWriteTime < MIN_WRITE_INTERVAL_MS)) {
+    return newState;
+  }
+
+  lastWriteTimeMap[busId] = now;
 
   // Update Firebase Realtime Database
   try {
@@ -78,6 +120,13 @@ export function subscribeBusState(busId = 'BUS24', callback) {
     fbUnsubscribe = onValue(busRef, (snapshot) => {
       if (snapshot.exists()) {
         const remoteData = snapshot.val();
+        // Validate coordinates from remote data
+        if (remoteData.latitude !== undefined && remoteData.longitude !== undefined) {
+          if (!isValidCoordinate(remoteData.latitude, remoteData.longitude)) {
+            delete remoteData.latitude;
+            delete remoteData.longitude;
+          }
+        }
         const merged = { ...getStoredBusState(busId), ...remoteData };
         saveStoredBusState(busId, merged);
         callback(merged);
@@ -105,7 +154,7 @@ export function subscribeBusState(busId = 'BUS24', callback) {
     if (event.key === `nishchit_bus_${busId}` && event.newValue) {
       try {
         callback(JSON.parse(event.newValue));
-      } catch (e) {}
+      } catch {}
     }
   };
   window.addEventListener('storage', handleStorage);
@@ -119,3 +168,4 @@ export function subscribeBusState(busId = 'BUS24', callback) {
     window.removeEventListener('storage', handleStorage);
   };
 }
+
