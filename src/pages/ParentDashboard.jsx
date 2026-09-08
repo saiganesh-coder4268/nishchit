@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
 import NishchitAssistant from '../components/NishchitAssistant';
+import { Button, StatusIndicator } from '../components/ui';
 import { subscribeBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
@@ -135,26 +136,10 @@ export default function ParentDashboard() {
             </div>
 
             <div className="status-indicator-group">
-              {isStale && (
-                <div className="status-badge stale">
-                  ⚠️ LOCATION MAY BE OUTDATED
-                </div>
-              )}
-              {!isStale && isLive && (
-                <div className="status-badge live">
-                  <span className="pulse-dot" /> 🟢 LIVE
-                </div>
-              )}
-              {isNotStarted && (
-                <div className="status-badge not-started">
-                  NOT STARTED
-                </div>
-              )}
-              {isCompleted && (
-                <div className="status-badge completed">
-                  TRIP COMPLETED
-                </div>
-              )}
+              {isStale && <StatusIndicator status="STALE" label="LOCATION MAY BE OUTDATED" />}
+              {!isStale && isLive && <StatusIndicator status="LIVE" label="LIVE" />}
+              {isNotStarted && <StatusIndicator status="NOT_STARTED" label="NOT STARTED" />}
+              {isCompleted && <StatusIndicator status="COMPLETED" label="TRIP COMPLETED" />}
             </div>
           </div>
 
@@ -190,13 +175,14 @@ export default function ParentDashboard() {
               <span>{isLive ? 'Live Tracking Active' : 'Bus Location Map'}</span>
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleFocusBus}
-              className="btn btn-primary btn-sm"
-              title="Focus map on bus position"
+              icon={Navigation}
             >
-              <Navigation size={14} /> View / Focus Bus
-            </button>
+              View / Focus Bus
+            </Button>
           </div>
 
           <div className="map-frame">
@@ -206,19 +192,21 @@ export default function ParentDashboard() {
 
         {/* Secondary Actions Bar */}
         <div className="parent-actions-bar">
-          <button
+          <Button
+            variant="outline"
             onClick={() => setShowCommPanel(!showCommPanel)}
-            className="btn btn-outline"
+            icon={MessageSquare}
           >
-            <MessageSquare size={16} /> Contact Driver
-          </button>
+            Contact Driver
+          </Button>
 
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setShowReportModal(true)}
-            className="btn btn-ghost text-muted"
+            icon={AlertCircle}
           >
-            <AlertCircle size={16} /> Report Issue
-          </button>
+            Report Issue
+          </Button>
         </div>
 
         {/* Driver Communication Panel (Drawer) */}
@@ -280,9 +268,9 @@ export default function ParentDashboard() {
                     />
                   </div>
 
-                  <button type="submit" className="btn btn-primary btn-full">
+                  <Button type="submit" variant="primary" fullWidth>
                     Submit Issue Report
-                  </button>
+                  </Button>
                 </form>
               )}
             </div>
@@ -292,4 +280,5 @@ export default function ParentDashboard() {
     </div>
   );
 }
+
 
