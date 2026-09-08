@@ -415,14 +415,9 @@ export default function DriverDashboard() {
             )}
 
             {isCompleted && (
-              <Button
-                variant="outline"
-                size="huge"
-                onClick={handleStartBus}
-                icon={Play}
-              >
-                RESTART NEW TRIP
-              </Button>
+              <p className="completed-notice-text" style={{ color: '#047857', fontWeight: 600, fontSize: '0.95rem', margin: '8px 0' }}>
+                Today's bus trip has ended safely. Location sharing is inactive.
+              </p>
             )}
           </div>
         </div>
