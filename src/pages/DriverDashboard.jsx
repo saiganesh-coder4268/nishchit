@@ -133,12 +133,20 @@ export default function DriverDashboard() {
 
   // START BUS handler
   const handleStartBus = () => {
+    if (!currentUser) {
+      setGpsError("AUTHENTICATION ERROR: User session not found. Please log in again.");
+      return;
+    }
     if (!hasAssignedBus) {
       setGpsError("NO ASSIGNED BUS: Your driver profile does not have an assigned bus ID. Contact transport administration.");
       return;
     }
     if (!isVerified) {
       setGpsError(`UNAUTHORIZED DRIVER: Verification status is '${driverVerification}'. Only VERIFIED drivers can operate a trip.`);
+      return;
+    }
+    if (busData.status === 'LIVE') {
+      setGpsError("DUPLICATE TRIP REJECTED: Trip is already active and LIVE on route.");
       return;
     }
 
@@ -149,7 +157,7 @@ export default function DriverDashboard() {
     // If Demo Mode is active
     if (isDemoMode) {
       startDemoRouteTracking(now);
-      broadcastAutoMessage("🚌 Trip Started: Bus 24 is now LIVE on route [DEMO ROUTE].");
+      broadcastAutoMessage(`🚌 Trip Started: ${busData.busNumber || 'Bus 24'} is now LIVE on route [DEMO ROUTE].`);
       return;
     }
 
@@ -201,21 +209,28 @@ export default function DriverDashboard() {
     const id = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
     watchIdRef.current = id;
 
-    broadcastAutoMessage("🚌 Trip Started: Bus 24 is now LIVE on Route 04.");
+    broadcastAutoMessage(`🚌 Trip Started: ${busData.busNumber || 'Bus 24'} is now LIVE on ${busData.routeNumber || 'Route 04'}.`);
   };
 
   // END TRIP handler
   const handleEndTrip = () => {
+    if (busData.status !== 'LIVE') {
+      setGpsError("CANNOT END TRIP: There is no active LIVE trip to end.");
+      return;
+    }
+
     stopAllTracking();
 
     const now = Date.now();
     updateBusState(busId, {
       status: 'COMPLETED',
       endedAt: now,
-      lastUpdated: now
+      lastUpdated: now,
+      latitude: busData.latitude || 17.4399,
+      longitude: busData.longitude || 78.4983
     });
 
-    broadcastAutoMessage("🏁 Trip Completed: Today's bus trip has arrived safely at school.");
+    broadcastAutoMessage(`🏁 Trip Completed: Today's ${busData.busNumber || 'Bus 24'} trip has arrived safely at school.`);
   };
 
   const toggleDemoMode = () => {
