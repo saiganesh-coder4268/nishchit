@@ -23,11 +23,11 @@ Calling the driver while driving is dangerous and unreliable, and most school/in
 
 Nishchit establishes a direct, real-time tracking pipeline:
 
-$$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIME DB} \longrightarrow \text{LEAFLET LIVE MAP (Parent View)}$$
+$$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIME DB} \longrightarrow \text{GOOGLE MAPS LIVE MAP (Parent View)}$$
 
 1. **Driver Starts Trip**: One-tap activation requests location or initiates simulated route movement.
 2. **Realtime Synchronization**: Bus coordinates and trip status stream live via Firebase Realtime Database.
-3. **Parent Visibility**: Linked parents see live status, relative update timestamps, and animated bus movement on an OpenStreetMap interface.
+3. **Parent Visibility**: Linked parents see live status, relative update timestamps, and animated bus movement on a Google Maps interface.
 4. **Safety-First Communication**: Drivers can send one-tap predefined quick status updates ("Traffic Delay", "Running Late") without typing while driving.
 
 ---
@@ -36,7 +36,7 @@ $$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIM
 
 - 🔒 **Driver Authentication & Verification Badge**: Only verified driver accounts (`VERIFIED ✓`) can start a trip.
 - ⚡ **One-Tap Trip Activation**: Single button tap toggles bus status to `🟢 BUS IS LIVE`.
-- 📍 **Browser GPS & Realtime Leaflet Map**: Smoothly updates bus position on OpenStreetMap tiles with custom animated bus markers.
+- 📍 **Browser GPS & Realtime Google Maps**: Smoothly updates bus position on Google Maps JavaScript API with custom animated bus markers and InfoWindows.
 - 💬 **Driver-Parent Communication**: Realtime message feed with safe quick-status buttons for drivers.
 - 🛠️ **GPS Demo Mode**: Simulated urban Hyderabad route generator for indoor evaluation.
 - ⚠️ **Offline & Connection Detection**: Displays last known location timestamp when connection drops.
@@ -48,7 +48,7 @@ $$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIM
 ## 🛠️ Tech Stack
 
 - **Frontend**: React (Vite), JavaScript, CSS3 Design System, React Router (`react-router-dom`), Lucide Icons (`lucide-react`)
-- **Maps**: Leaflet.js, React-Leaflet, OpenStreetMap
+- **Maps**: Google Maps JavaScript API (`@react-google-maps/api`)
 - **Backend & Database**: Firebase Authentication, Firebase Realtime Database
 - **Location**: Browser Geolocation API (`navigator.geolocation.watchPosition`)
 - **Security**: Firebase Database Security Rules (`database.rules.json`)
@@ -75,7 +75,7 @@ $$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIM
                                                  ▼
                                ┌───────────────────────────────────┐
                                │        PARENT DASHBOARD           │
-                               │   (Leaflet Live Map, Realtime     │
+                               │   (Google Maps Live Map, Realtime │
                                │    Listener, Driver Communication)│
                                └───────────────────────────────────┘
 ```
@@ -119,7 +119,7 @@ Nishchit provides **Instant Demo Access** buttons on the landing page and login 
    ```bash
    cp .env.example .env
    ```
-   *The default Firebase credentials for project `nishchit-eb118` are pre-filled in `.env`.*
+   *The default Firebase configuration and Google Maps API Key are configured in `.env`.*
 
 4. **Run Development Server**:
    ```bash
@@ -130,13 +130,3 @@ Nishchit provides **Instant Demo Access** buttons on the landing page and login 
    ```bash
    npm run build
    ```
-
----
-
-## 🧪 Quick 2-Minute Demo Test Flow
-
-1. Open two browser windows side-by-side.
-2. In Window 1, log in as **Driver** -> See `VERIFIED ✓` badge for Bus 24 -> Click **START BUS**.
-3. In Window 2, log in as **Parent** -> Watch status automatically switch from `🔴 BUS NOT STARTED` to `🟢 BUS ON THE WAY` and the Leaflet map load with the moving bus marker!
-4. In Driver Window 1, tap `⚠️ Running Late` -> See message instantly appear in Parent Window 2.
-5. In Driver Window 1, click **END TRIP** -> Parent UI updates to `⚪ TRIP COMPLETED`.

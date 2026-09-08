@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Navigation, Heart } from 'lucide-react';
+import { ShieldCheck, Navigation, MapPin } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -15,7 +15,7 @@ export default function Footer() {
         </div>
         <div className="footer-meta">
           <span className="tech-badge">
-            <Navigation size={14} /> OpenStreetMap + Leaflet.js
+            <MapPin size={14} /> Google Maps API
           </span>
           <span className="tech-badge">
             <ShieldCheck size={14} /> Firebase Auth & Realtime DB
