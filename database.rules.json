@@ -33,7 +33,10 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid == $uid",
+        "verificationStatus": {
+          ".write": "false"
+        }
       }
     },
     "messages": {

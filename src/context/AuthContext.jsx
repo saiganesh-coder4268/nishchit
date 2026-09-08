@@ -126,7 +126,7 @@ export function AuthProvider({ children }) {
               role: user.email.includes('driver') ? 'driver' : 'parent',
               busId: 'BUS24',
               routeId: 'ROUTE04',
-              verificationStatus: 'VERIFIED'
+              verificationStatus: user.email.includes('driver') ? 'PENDING' : undefined
             });
           }
         } catch (err) {
@@ -191,7 +191,7 @@ export function AuthProvider({ children }) {
           role: expectedRole,
           busId: 'BUS24',
           routeId: 'ROUTE04',
-          verificationStatus: expectedRole === 'driver' ? 'VERIFIED' : undefined
+          verificationStatus: expectedRole === 'driver' ? 'PENDING' : undefined
         };
         await set(userRef, profile);
       }
@@ -218,7 +218,7 @@ export function AuthProvider({ children }) {
         busId: extraData.busId || 'BUS24',
         routeId: extraData.routeId || 'ROUTE04',
         name: extraData.name || formattedEmail.split('@')[0],
-        verificationStatus: role === 'driver' ? 'VERIFIED' : undefined,
+        verificationStatus: role === 'driver' ? 'PENDING' : undefined,
         ...extraData
       };
       await set(ref(database, `users/${res.user.uid}`), profile);

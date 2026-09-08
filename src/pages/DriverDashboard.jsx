@@ -45,8 +45,9 @@ export default function DriverDashboard() {
   const demoStepRef = useRef(0);
 
   const busId = currentUser?.busId || 'BUS24';
-  const driverVerification = currentUser?.verificationStatus || 'VERIFIED';
+  const driverVerification = currentUser?.verificationStatus || (currentUser?.uid === 'demo-driver-001' ? 'VERIFIED' : 'PENDING');
   const isVerified = driverVerification === 'VERIFIED';
+  const hasAssignedBus = Boolean(currentUser?.busId);
 
   // Check Firebase Connection State (.info/connected)
   useEffect(() => {
@@ -132,8 +133,12 @@ export default function DriverDashboard() {
 
   // START BUS handler
   const handleStartBus = () => {
+    if (!hasAssignedBus) {
+      setGpsError("NO ASSIGNED BUS: Your driver profile does not have an assigned bus ID. Contact transport administration.");
+      return;
+    }
     if (!isVerified) {
-      alert("Only verified drivers can start a trip.");
+      setGpsError(`UNAUTHORIZED DRIVER: Verification status is '${driverVerification}'. Only VERIFIED drivers can operate a trip.`);
       return;
     }
 
@@ -327,8 +332,8 @@ export default function DriverDashboard() {
             {isNotStarted && (
               <button
                 onClick={handleStartBus}
-                disabled={!isVerified}
-                className={`btn btn-success btn-huge ${!isVerified ? 'disabled' : ''}`}
+                disabled={!isVerified || !hasAssignedBus}
+                className={`btn btn-success btn-huge ${(!isVerified || !hasAssignedBus) ? 'disabled' : ''}`}
               >
                 <Play size={28} fill="currentColor" />
                 START BUS

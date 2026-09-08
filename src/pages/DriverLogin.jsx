@@ -40,7 +40,7 @@ export default function DriverLogin() {
           driverId: 'DRV-' + Math.floor(1000 + Math.random() * 9000),
           busId: 'BUS24',
           routeId: 'ROUTE04',
-          verificationStatus: 'VERIFIED' // Seeded as verified for MVP demo
+          verificationStatus: 'PENDING' // New driver registrations require institution review
         });
       } else {
         await loginWithCredentials(email, password, 'driver');
