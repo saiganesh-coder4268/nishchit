@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ref, onValue, push, serverTimestamp } from 'firebase/database';
+import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  MessageSquare, Send, ShieldAlert, AlertTriangle, 
-  Clock, CheckCheck, Bus, Smartphone, X 
+  MessageSquare, Send, AlertTriangle, X 
 } from 'lucide-react';
 
 export default function CommunicationPanel({ currentUser, busData, onClose }) {

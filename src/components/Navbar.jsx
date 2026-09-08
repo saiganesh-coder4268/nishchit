@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bus, ShieldCheck, User } from 'lucide-react';
+import { Bus, User } from 'lucide-react';
 
 export default function Navbar({ currentUser, onLogout }) {
   const location = useLocation();

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -17,6 +17,7 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isLoggingOutRef = useRef(false);
 
   // Seeded Demo Users
   const DEMO_DRIVER = {
@@ -77,6 +78,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     seedDefaultBus();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (isLoggingOutRef.current) {
+        setCurrentUser(null);
+        isLoggingOutRef.current = false;
+        setLoading(false);
+        return;
+      }
       if (user) {
         // Fetch user profile from database
         try {
@@ -126,35 +133,31 @@ export function AuthProvider({ children }) {
       return DEMO_PARENT;
     }
 
-    try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      const userRef = ref(database, `users/${res.user.uid}`);
-      const snapshot = await get(userRef);
-      let profile = snapshot.exists() ? snapshot.val() : null;
+    const res = await signInWithEmailAndPassword(auth, email, password);
+    const userRef = ref(database, `users/${res.user.uid}`);
+    const snapshot = await get(userRef);
+    let profile = snapshot.exists() ? snapshot.val() : null;
 
-      if (profile && profile.role !== expectedRole) {
-        await signOut(auth);
-        throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}.`);
-      }
-
-      if (!profile) {
-        profile = {
-          uid: res.user.uid,
-          email: res.user.email,
-          name: res.user.email.split('@')[0],
-          role: expectedRole,
-          busId: 'BUS24',
-          routeId: 'ROUTE04',
-          verificationStatus: expectedRole === 'driver' ? 'VERIFIED' : undefined
-        };
-        await set(userRef, profile);
-      }
-
-      setCurrentUser(profile);
-      return profile;
-    } catch (err) {
-      throw err;
+    if (profile && profile.role !== expectedRole) {
+      await signOut(auth);
+      throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}.`);
     }
+
+    if (!profile) {
+      profile = {
+        uid: res.user.uid,
+        email: res.user.email,
+        name: res.user.email.split('@')[0],
+        role: expectedRole,
+        busId: 'BUS24',
+        routeId: 'ROUTE04',
+        verificationStatus: expectedRole === 'driver' ? 'VERIFIED' : undefined
+      };
+      await set(userRef, profile);
+    }
+
+    setCurrentUser(profile);
+    return profile;
   };
 
   const signupWithCredentials = async (email, password, role, extraData) => {
@@ -185,12 +188,13 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    isLoggingOutRef.current = true;
+    setCurrentUser(null);
     try {
       await signOut(auth);
-    } catch (e) {
+    } catch {
       // Ignore
     }
-    setCurrentUser(null);
   };
 
   const value = {
@@ -208,3 +212,4 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+

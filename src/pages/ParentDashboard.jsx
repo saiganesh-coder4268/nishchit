@@ -7,8 +7,8 @@ import { subscribeBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  Bus, MapPin, Clock, User, ShieldCheck, CheckCircle2, 
-  AlertCircle, MessageSquare, AlertTriangle, RefreshCw, Radio, WifiOff, X 
+  Bus, Clock, User, CheckCircle2, 
+  AlertCircle, MessageSquare, RefreshCw, Radio, WifiOff, X 
 } from 'lucide-react';
 
 export default function ParentDashboard() {

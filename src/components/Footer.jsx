@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Navigation, MapPin } from 'lucide-react';
+import { ShieldCheck, MapPin } from 'lucide-react';
 
 export default function Footer() {
   return (

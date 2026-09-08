@@ -24,10 +24,11 @@ const getBusMarkerIcon = (isLive) => {
       <circle cx="42" cy="47" r="6" fill="#1B1B1B" stroke="#1B2A4A" stroke-width="1.5"/>
     </svg>
   `;
+  const hasMaps = typeof window !== 'undefined' && window.google && window.google.maps;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: window.google ? new window.google.maps.Size(60, 60) : null,
-    anchor: window.google ? new window.google.maps.Point(30, 30) : null
+    scaledSize: hasMaps ? new window.google.maps.Size(60, 60) : null,
+    anchor: hasMaps ? new window.google.maps.Point(30, 30) : null
   };
 };
 

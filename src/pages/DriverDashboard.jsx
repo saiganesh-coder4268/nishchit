@@ -6,8 +6,8 @@ import { subscribeBusState, updateBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  Bus, MapPin, Play, Square, Navigation, AlertTriangle, 
-  CheckCircle2, Clock, Smartphone, MessageSquare, Radio, ShieldCheck, WifiOff, ToggleLeft, ToggleRight 
+  Play, Square, Navigation, AlertTriangle, 
+  CheckCircle2, Clock, Smartphone, MessageSquare, Radio, WifiOff, ToggleLeft, ToggleRight 
 } from 'lucide-react';
 
 // Predefined Simulated GPS Demo Route Coordinates (Urban Hyderabad School Route)
@@ -137,6 +137,7 @@ export default function DriverDashboard() {
       return;
     }
 
+    stopAllTracking();
     setGpsError(null);
     const now = Date.now();
 
@@ -215,6 +216,33 @@ export default function DriverDashboard() {
   const toggleDemoMode = () => {
     const nextVal = !isDemoMode;
     setIsDemoMode(nextVal);
+
+    if (busData.status === 'LIVE') {
+      stopAllTracking();
+      const now = Date.now();
+      if (nextVal) {
+        startDemoRouteTracking(now);
+      } else if (navigator.geolocation) {
+        const options = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+        const handleSuccess = (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          updateBusState(busId, {
+            status: 'LIVE',
+            latitude,
+            longitude,
+            accuracy: Math.round(accuracy),
+            lastUpdated: Date.now(),
+            isDemoMode: false
+          });
+        };
+        const handleError = (err) => {
+          setGpsError(err.code === 1 ? "Location access denied. Please allow location permissions or switch to DEMO MODE." : "Unable to get GPS location.");
+        };
+        navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+        watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+      }
+    }
+
     updateBusState(busId, {
       isDemoMode: nextVal
     });

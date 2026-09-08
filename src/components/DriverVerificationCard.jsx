@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, ShieldAlert, Clock, Bus, MapPin, Building2, CreditCard } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Clock, Bus, Building2 } from 'lucide-react';
 
 export default function DriverVerificationCard({ driver, busInfo }) {
   if (!driver) return null;

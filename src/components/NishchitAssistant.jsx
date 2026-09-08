@@ -26,7 +26,6 @@ export default function NishchitAssistant({ busData, currentUser }) {
     let reply = "";
     const isLive = busData?.status === 'LIVE';
     const isCompleted = busData?.status === 'COMPLETED';
-    const isNotStarted = !isLive && !isCompleted;
     const lastTime = busData?.lastUpdated ? new Date(busData.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently';
     const startTime = busData?.startedAt ? new Date(busData.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'not started';
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, ShieldCheck, Lock, Mail, User, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Bus, Lock, Mail, User, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function DriverLogin() {
   const { loginWithCredentials, signupWithCredentials, quickDemoLogin } = useAuth();

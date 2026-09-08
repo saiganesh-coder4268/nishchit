@@ -1,4 +1,4 @@
-import { ref, onValue, update, push, get } from 'firebase/database';
+import { ref, onValue, update } from 'firebase/database';
 import { database } from '../firebase';
 
 const CHANNEL_NAME = 'nishchit_bus_sync';
