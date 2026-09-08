@@ -595,113 +595,167 @@
   margin-top: 2px;
 }
 
-.driver-status-card {
-  padding: 28px 24px;
+/* Driver Dashboard Page - Phase 12 Refactor */
+.driver-dashboard-page {
+  padding: 32px 20px 60px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.status-header-bar {
+.driver-control-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 24px;
+}
+
+.control-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 18px;
-  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.bus-identity {
+.bus-route-title {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.bus-identity h2 {
-  font-size: 1.8rem;
+.bus-route-title h2 {
+  font-size: 2rem;
   font-weight: 900;
-  color: var(--color-secondary);
+  color: var(--color-brand-primary);
+  line-height: 1;
 }
 
-.route-pill {
-  background: #f1f5f9;
-  color: #334155;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
-  font-size: 0.85rem;
-}
-
-.action-button-area {
-  display: flex;
-  flex-direction: column;
+.demo-toggle-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 20px 0;
-}
-
-.btn-huge {
-  padding: 22px 48px;
-  font-size: 1.4rem;
-  font-weight: 800;
-  border-radius: var(--radius-md);
-  letter-spacing: 0.04em;
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  width: 100%;
-  max-width: 400px;
-}
-
-.btn-huge:hover:not(.disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 25px rgba(16, 185, 129, 0.4);
-}
-
-.btn-huge.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: #cbd5e1;
-}
-
-.live-controls-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  width: 100%;
-}
-
-.live-status-details {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 100%;
-}
-
-.live-detail-box {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 10px 16px;
+  gap: 6px;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  padding: 6px 14px;
   border-radius: var(--radius-sm);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.demo-toggle-btn.active {
+  background-color: var(--status-live-bg);
+  border-color: var(--status-live-border);
+  color: var(--status-live-fg);
+}
+
+.state-summary-row {
+  margin-bottom: 24px;
+}
+
+.state-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.state-sub {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.last-update-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.primary-action-area {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.btn-huge-driver {
+  width: 100%;
+  max-width: 480px;
+  min-height: 64px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.btn-huge-driver:active {
+  transform: scale(0.98);
+}
+
+.driver-quick-comm-section {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-subtle);
+}
+
+.quick-comm-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 14px;
 }
 
-.driver-safety-banner {
-  background: #f1f5f9;
-  border: 1px dashed #cbd5e1;
-  color: var(--text-muted);
-  padding: 12px 18px;
-  border-radius: var(--radius-md);
-  font-size: 0.82rem;
-  font-weight: 600;
+.quick-comm-header h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.quick-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.quick-action-btn {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  text-align: center;
+  transition: var(--transition-fast);
+}
+
+.quick-action-btn:hover {
+  background-color: var(--color-brand-light);
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-accent);
+}
+
+.driver-drawer-toggle {
+  margin-bottom: 20px;
 }
 
 /* Bus Map & Leaflet Styles */
