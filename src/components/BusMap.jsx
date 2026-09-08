@@ -48,6 +48,7 @@ export default function BusMap({ busData }) {
   const latitude = (!isNaN(rawLat) && rawLat !== 0) ? rawLat : 17.4399; // Default Hyderabad coordinates
   const longitude = (!isNaN(rawLng) && rawLng !== 0) ? rawLng : 78.4983;
   const isLive = busData?.status === 'LIVE';
+  const isStale = isLive && Boolean(busData?.lastUpdated) && ((busData?.lastUpdated || 0) < (busData?.lastUpdatedCheck || 0)); // Managed via lastUpdated state
   const center = { lat: latitude, lng: longitude };
 
   const onLoad = useCallback((mapInstance) => {
@@ -58,10 +59,10 @@ export default function BusMap({ busData }) {
     setMap(null);
   }, []);
 
-  // Smoothly re-center Google Map when bus moves
+  // Smoothly re-center Google Map when bus coordinates move
   useEffect(() => {
-    if (map && center.lat && center.lng) {
-      map.panTo(center);
+    if (map && latitude && longitude) {
+      map.panTo({ lat: latitude, lng: longitude });
     }
   }, [map, latitude, longitude]);
 
@@ -139,8 +140,8 @@ export default function BusMap({ busData }) {
                   </div>
                 </div>
 
-                <div className="popup-status" style={{ marginTop: '8px', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', background: isLive ? '#ecfdf5' : '#f1f5f9', color: isLive ? '#065f46' : '#64748b' }}>
-                  {isLive ? '🟢 Live Google Maps Tracking' : 'Bus Parked / Last Position'}
+                <div className="popup-status" style={{ marginTop: '8px', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', background: isStale ? '#fffbebfb' : isLive ? '#ecfdf5' : '#f1f5f9', color: isStale ? '#b45309' : isLive ? '#065f46' : '#64748b' }}>
+                  {isStale ? '⚠️ Stale Location Fix' : isLive ? '🟢 Live Google Maps Tracking' : 'Bus Parked / Last Position'}
                 </div>
               </div>
             </InfoWindowF>
