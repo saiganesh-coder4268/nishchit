@@ -3,15 +3,28 @@
     "buses": {
       "$busId": {
         ".read": true,
-        ".write": "auth != null || data.child('isDemoMode').val() == true",
+        ".write": "data.child('isDemoMode').val() == true || newData.child('isDemoMode').val() == true || (auth != null && root.child('users').child(auth.uid).child('role').val() == 'driver' && root.child('users').child(auth.uid).child('busId').val() == $busId && root.child('users').child(auth.uid).child('verificationStatus').val() == 'VERIFIED')",
         "status": {
           ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'LIVE' || newData.val() == 'COMPLETED')"
         },
         "latitude": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
         },
         "longitude": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        "role": {
+          ".validate": "newData.val() == 'driver' || newData.val() == 'parent'",
+          ".write": "!data.exists()"
+        },
+        "verificationStatus": {
+          ".write": "false"
         }
       }
     },
@@ -30,27 +43,27 @@
         ".write": "auth != null && auth.uid == $parentId"
       }
     },
-    "users": {
-      "$uid": {
-        ".read": true,
-        ".write": "auth != null && auth.uid == $uid",
-        "verificationStatus": {
-          ".write": "false"
-        }
-      }
-    },
     "messages": {
       "$busId": {
         ".read": true,
         "$messageId": {
-          ".write": true
+          ".write": "auth != null || newData.child('senderId').val() != null",
+          "message": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 500"
+          },
+          "senderRole": {
+            ".validate": "newData.val() == 'driver' || newData.val() == 'parent'"
+          }
         }
       }
     },
     "reports": {
-      ".read": true,
+      ".read": "auth != null",
       "$reportId": {
-        ".write": true
+        ".write": "auth != null || newData.child('parentId').val() != null",
+        "type": {
+          ".validate": "newData.isString()"
+        }
       }
     }
   }
