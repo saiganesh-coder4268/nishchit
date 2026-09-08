@@ -61,10 +61,11 @@ export default function ParentLogin() {
         {/* Demo Shortcut Card */}
         <div className="auth-demo-box parent">
           <div className="demo-box-content">
-            <span className="demo-badge parent">Hackathon Demo Access</span>
+            <span className="demo-badge parent">Instant Demo Access</span>
             <strong>Student: Aarav (Class 8-A)</strong>
             <span className="demo-sub">Bus 24 · Route 04</span>
           </div>
+
           <button
             type="button"
             onClick={handleDemoLogin}

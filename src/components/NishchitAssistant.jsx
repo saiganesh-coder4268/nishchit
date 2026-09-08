@@ -7,8 +7,9 @@ export default function NishchitAssistant({ busData, currentUser }) {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: `Hello! I'm your Nishchit AI Assistant. Ask me anything about ${busData?.busNumber || 'Bus 24'} or student ${currentUser?.studentName || 'Aarav'}'s transport status!`
+      text: `Hello! I'm your Nishchit Transport Assistant. Ask me anything about ${busData?.busNumber || 'Bus 24'} or student ${currentUser?.studentName || 'Aarav'}'s transport status!`
     }
+
   ]);
 
   const handleSend = (e) => {
@@ -70,8 +71,9 @@ export default function NishchitAssistant({ busData, currentUser }) {
       {!isOpen ? (
         <button onClick={() => setIsOpen(true)} className="ai-widget-trigger">
           <Sparkles size={18} />
-          <span>Ask Nishchit AI</span>
+          <span>Ask Nishchit Assistant</span>
         </button>
+
       ) : (
         <div className="ai-assistant-card">
           <div className="ai-card-header">

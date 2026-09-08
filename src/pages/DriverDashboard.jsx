@@ -264,15 +264,16 @@ export default function DriverDashboard() {
               <h2>{busData.busNumber || 'Bus 24'}</h2>
               <span className="route-pill">{busData.routeNumber || 'Route 04'}</span>
               
-              {/* GPS / DEMO Mode Switcher (Milestone 14) */}
+              {/* GPS / DEMO Mode Switcher */}
               <button
                 onClick={toggleDemoMode}
                 className={`demo-mode-toggle ${isDemoMode ? 'active' : ''}`}
-                title="Toggle between Real GPS and Hackathon Simulated Demo Route"
+                title="Toggle between Real GPS and Simulated Demo Route"
               >
                 {isDemoMode ? <ToggleRight size={22} color="#10b981" /> : <ToggleLeft size={22} color="#64748b" />}
                 <span>{isDemoMode ? 'DEMO MODE (ACTIVE)' : 'REAL GPS MODE'}</span>
               </button>
+
             </div>
 
             <div className="status-badge-container">

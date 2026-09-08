@@ -28,7 +28,8 @@ export default function LandingPage({ onQuickLogin }) {
 
         {/* Quick Demo Instant Access Bar */}
         <div className="demo-login-bar">
-          <span className="demo-bar-label">⚡ Hackathon Instant Demo:</span>
+          <span className="demo-bar-label">⚡ Instant Demo Access:</span>
+
           <button
             onClick={() => onQuickLogin('driver')}
             className="btn-demo-quick driver"

@@ -38,10 +38,10 @@ $$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIM
 - ⚡ **One-Tap Trip Activation**: Single button tap toggles bus status to `🟢 BUS IS LIVE`.
 - 📍 **Browser GPS & Realtime Leaflet Map**: Smoothly updates bus position on OpenStreetMap tiles with custom animated bus markers.
 - 💬 **Driver-Parent Communication**: Realtime message feed with safe quick-status buttons for drivers.
-- 🛠️ **GPS Demo Mode**: Simulated Hyderabad urban route runner for indoor demo reliability.
+- 🛠️ **GPS Demo Mode**: Simulated urban Hyderabad route generator for indoor evaluation.
 - ⚠️ **Offline & Connection Detection**: Displays last known location timestamp when connection drops.
 - 📝 **Parent Issue Reporting**: Quick modal for reporting delays, non-movement, or emergency concerns.
-- 🤖 **Nishchit Transport AI Assistant**: Natural-language query widget powered by transport state data.
+- 🤖 **Nishchit Transport Assistant**: Natural-language query widget powered by transport state data.
 
 ---
 
@@ -84,7 +84,7 @@ $$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIM
 
 ## 🔑 Demo Accounts & Instant Access
 
-For hackathon judges and evaluation, Nishchit provides **One-Tap Demo Login** buttons on the landing page and login screens:
+Nishchit provides **Instant Demo Access** buttons on the landing page and login screens:
 
 ### 🚌 Driver Account
 - **Email**: `driver@nishchit.app`
@@ -105,7 +105,7 @@ For hackathon judges and evaluation, Nishchit provides **One-Tap Demo Login** bu
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/your-username/nishchit.git
+   git clone https://github.com/saiganesh-coder4268/nishchit.git
    cd nishchit
    ```
 
@@ -136,7 +136,7 @@ For hackathon judges and evaluation, Nishchit provides **One-Tap Demo Login** bu
 ## 🧪 Quick 2-Minute Demo Test Flow
 
 1. Open two browser windows side-by-side.
-2. In Window 1, log in as **Driver** -> See `VERIFIED ✓` badge -> Click **START BUS**.
+2. In Window 1, log in as **Driver** -> See `VERIFIED ✓` badge for Bus 24 -> Click **START BUS**.
 3. In Window 2, log in as **Parent** -> Watch status automatically switch from `🔴 BUS NOT STARTED` to `🟢 BUS ON THE WAY` and the Leaflet map load with the moving bus marker!
 4. In Driver Window 1, tap `⚠️ Running Late` -> See message instantly appear in Parent Window 2.
 5. In Driver Window 1, click **END TRIP** -> Parent UI updates to `⚪ TRIP COMPLETED`.

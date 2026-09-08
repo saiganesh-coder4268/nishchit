@@ -63,10 +63,11 @@ export default function DriverLogin() {
         {/* Demo Shortcut Card */}
         <div className="auth-demo-box">
           <div className="demo-box-content">
-            <span className="demo-badge">Hackathon Demo Access</span>
+            <span className="demo-badge">Instant Demo Access</span>
             <strong>Driver: Rajesh Kumar</strong>
             <span className="demo-sub">Bus 24 · Route 04 · Verified ✓</span>
           </div>
+
           <button
             type="button"
             onClick={handleDemoLogin}
