@@ -144,7 +144,7 @@ export default function BusMap({ busData }) {
                 </div>
 
                 <div className="popup-status" style={{ marginTop: '8px', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', background: isStale ? '#fffbebfb' : isLive ? '#ecfdf5' : '#f1f5f9', color: isStale ? '#b45309' : isLive ? '#065f46' : '#64748b' }}>
-                  {isStale ? '⚠️ Stale Location Fix' : isLive ? '🟢 Live Google Maps Tracking' : 'Bus Parked / Last Position'}
+                  {isStale ? 'Location Not Updated Recently' : isLive ? 'Live Location Active' : 'Bus Parked / Not Started'}
                 </div>
               </div>
             </InfoWindowF>

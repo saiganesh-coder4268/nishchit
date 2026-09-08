@@ -71,7 +71,7 @@ export function getParentStatusInfo(busData, now = Date.now()) {
   const formatRelativeTime = (ts) => {
     if (!ts) return 'recently';
     const diffSec = Math.floor(Math.max(0, now - ts) / 1000);
-    if (diffSec < 10) return '8 seconds ago';
+    if (diffSec < 10) return 'recently';
     if (diffSec < 60) return `${diffSec} seconds ago`;
     const diffMin = Math.floor(diffSec / 60);
     if (diffMin === 1) return '1 minute ago';
@@ -84,44 +84,44 @@ export function getParentStatusInfo(busData, now = Date.now()) {
     case 'LIVE':
       return {
         status: 'LIVE',
-        title: 'BUS IS LIVE',
-        subtitle: `Bus is moving — Last updated ${formatRelativeTime(lastUpdated)}`
+        title: 'ON ROUTE',
+        subtitle: `Updated ${formatRelativeTime(lastUpdated)}`
       };
 
     case 'STALE':
       return {
         status: 'STALE',
-        title: 'LOCATION MAY BE OUTDATED',
-        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Coordinates may not reflect exact live position.`
+        title: 'LOCATION NOT UPDATED RECENTLY',
+        subtitle: `Last update: ${formatRelativeTime(lastUpdated)}`
       };
 
     case 'UNAVAILABLE':
       if (busData?.status === 'LIVE') {
         return {
           status: 'STALE',
-          title: 'LOCATION UNAVAILABLE',
-          subtitle: `Location stream interrupted — Last update received ${formatRelativeTime(lastUpdated)}.`
+          title: 'LOCATION NOT UPDATED RECENTLY',
+          subtitle: `Last update: ${formatRelativeTime(lastUpdated)}`
         };
       }
       return {
         status: 'NOT_STARTED',
-        title: 'LOCATION UNAVAILABLE',
-        subtitle: 'No valid location coordinates received for this bus.'
+        title: 'NOT STARTED',
+        subtitle: "The bus has not started today's trip yet."
       };
 
     case 'COMPLETED':
       return {
         status: 'COMPLETED',
         title: 'TRIP COMPLETED',
-        subtitle: "Today's bus trip has ended safely."
+        subtitle: "Today's bus trip has ended safely. Active tracking has ended."
       };
 
     case 'NOT_STARTED':
     default:
       return {
         status: 'NOT_STARTED',
-        title: 'BUS NOT STARTED',
-        subtitle: "Your bus hasn't started its trip yet."
+        title: 'NOT STARTED',
+        subtitle: "The bus has not started today's trip yet."
       };
   }
 }
@@ -148,7 +148,7 @@ export function getDriverTrackingStatus(busData, isStarting, gpsError, now = Dat
     return {
       trackingState: 'STARTING',
       label: 'STARTING TRIP...',
-      subtext: 'Acquiring GPS location fix and connecting...'
+      subtext: 'Acquiring GPS location fix...'
     };
   }
 
@@ -158,7 +158,7 @@ export function getDriverTrackingStatus(busData, isStarting, gpsError, now = Dat
     return {
       trackingState: 'COMPLETED',
       label: 'TRIP COMPLETED',
-      subtext: 'Trip ended safely'
+      subtext: 'Trip ended successfully.'
     };
   }
 
@@ -167,20 +167,20 @@ export function getDriverTrackingStatus(busData, isStarting, gpsError, now = Dat
     if (freshness === 'STALE' || freshness === 'UNAVAILABLE') {
       return {
         trackingState: 'CONNECTION_DEGRADED',
-        label: 'CONNECTION UNSTABLE',
-        subtext: 'Retrying location update...'
+        label: 'LOCATION UNAVAILABLE',
+        subtext: 'Retrying connection...'
       };
     }
     return {
       trackingState: 'LIVE',
-      label: 'LOCATION SHARING ACTIVE',
-      subtext: 'GPS tracking active'
+      label: 'TRIP IN PROGRESS',
+      subtext: 'Location sharing active'
     };
   }
 
   return {
     trackingState: 'READY',
-    label: 'BUS READY',
-    subtext: 'Trip ready to depart'
+    label: 'READY TO DEPART',
+    subtext: 'Location sharing is ready.'
   };
 }
