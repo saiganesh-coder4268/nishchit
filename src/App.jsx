@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
@@ -10,41 +11,20 @@ import ParentDashboard from './pages/ParentDashboard';
 import './App.css';
 
 function AppContent() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { currentUser, quickDemoLogin, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleQuickLogin = (role) => {
+    quickDemoLogin(role);
     if (role === 'driver') {
-      const demoDriver = {
-        uid: 'demo-driver-1',
-        name: 'Rajesh Kumar',
-        email: 'driver@nishchit.app',
-        role: 'driver',
-        driverId: 'DRV001',
-        busId: 'BUS24',
-        routeId: 'ROUTE04',
-        verificationStatus: 'VERIFIED',
-      };
-      setCurrentUser(demoDriver);
       navigate('/driver/dashboard');
     } else {
-      const demoParent = {
-        uid: 'demo-parent-1',
-        name: 'Demo Parent',
-        email: 'parent@nishchit.app',
-        role: 'parent',
-        studentName: 'Aarav',
-        studentClass: 'Class 8-A',
-        busId: 'BUS24',
-        routeId: 'ROUTE04',
-      };
-      setCurrentUser(demoParent);
       navigate('/parent/dashboard');
     }
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
+    logout();
     navigate('/');
   };
 
@@ -59,11 +39,11 @@ function AppContent() {
           />
           <Route
             path="/driver/login"
-            element={<DriverLogin onQuickLogin={() => handleQuickLogin('driver')} />}
+            element={<DriverLogin />}
           />
           <Route
             path="/parent/login"
-            element={<ParentLogin onQuickLogin={() => handleQuickLogin('parent')} />}
+            element={<ParentLogin />}
           />
           <Route
             path="/driver/dashboard"
@@ -83,7 +63,10 @@ function AppContent() {
 export default function App() {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }
+
