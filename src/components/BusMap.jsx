@@ -10,26 +10,27 @@ const containerStyle = {
   borderRadius: '12px'
 };
 
-// Create custom SVG bus marker icon for Google Maps
+// Create custom SVG bus marker icon for Google Maps using user provided school bus model
 const getBusMarkerIcon = (isLive) => {
-  const color = isLive ? '#10b981' : '#2563eb';
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
-      <circle cx="22" cy="22" r="20" fill="${color}" stroke="#ffffff" stroke-width="3" />
-      <circle cx="22" cy="22" r="21" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.5"/>
-      <g transform="translate(10, 10) scale(1)">
-        <path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4c-1.1 0-2.1.8-2.4 1.8l-1.4 5C.1 13.2 0 13.6 0 14c0 .4.1.8.2 1.2C.5 16.3 1 18 1 18h3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="6.5" cy="17.5" r="2" fill="#ffffff"/>
-        <circle cx="16.5" cy="17.5" r="2" fill="#ffffff"/>
-      </g>
+    <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+      ${isLive ? '<circle cx="30" cy="30" r="28" fill="#10b981" opacity="0.3"/>' : ''}
+      <rect x="10" y="12" width="40" height="32" rx="6" fill="#FBC02D" stroke="#1B2A4A" stroke-width="2.5"/>
+      <rect x="15" y="17" width="30" height="12" rx="3" fill="#1B2A4A"/>
+      <rect x="12" y="31" width="6" height="8" rx="2" fill="#E8873A"/>
+      <rect x="42" y="31" width="6" height="8" rx="2" fill="#E8873A"/>
+      <rect x="10" y="40" width="40" height="5" rx="2" fill="#37474F"/>
+      <circle cx="18" cy="47" r="6" fill="#1B1B1B" stroke="#1B2A4A" stroke-width="1.5"/>
+      <circle cx="42" cy="47" r="6" fill="#1B1B1B" stroke="#1B2A4A" stroke-width="1.5"/>
     </svg>
   `;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: window.google ? new window.google.maps.Size(44, 44) : null,
-    anchor: window.google ? new window.google.maps.Point(22, 22) : null
+    scaledSize: window.google ? new window.google.maps.Size(60, 60) : null,
+    anchor: window.google ? new window.google.maps.Point(30, 30) : null
   };
 };
+
 
 export default function BusMap({ busData }) {
   const { isLoaded, loadError } = useJsApiLoader({
