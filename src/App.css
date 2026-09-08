@@ -1387,6 +1387,95 @@
   font-size: 0.82rem;
 }
 
+/* Comprehensive Responsive Media Queries (320px to Desktop) */
+body, #root {
+  overflow-x: hidden;
+  min-width: 320px;
+}
+
+/* Mobile Screens (<= 430px: 320px, 375px, 390px, 430px) */
+@media (max-width: 430px) {
+  .landing-page, .auth-page, .parent-dashboard-page, .driver-dashboard-page {
+    padding: 16px 12px 40px;
+  }
+
+  .auth-container {
+    padding: 24px 16px;
+  }
+
+  .bus-number-title {
+    font-size: 1.35rem;
+  }
+
+  .route-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+  }
+
+  .map-frame {
+    height: 320px;
+  }
+
+  .btn-huge-driver {
+    min-height: 56px;
+    font-size: 1.15rem;
+  }
+
+  .quick-buttons-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .quick-action-btn {
+    min-height: 48px;
+    font-size: 0.82rem;
+    padding: 10px 8px;
+  }
+
+  .ai-assistant-widget {
+    bottom: 16px;
+    right: 16px;
+  }
+
+  .ai-assistant-card {
+    width: calc(100vw - 32px);
+  }
+}
+
+/* Very Small Mobile (320px to 360px) */
+@media (max-width: 360px) {
+  .quick-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-brand {
+    font-size: 2.2rem;
+  }
+
+  .hero-headings h2 {
+    font-size: 1.2rem;
+  }
+}
+
+/* Tablet Screens (431px to 768px) */
+@media (min-width: 431px) and (max-width: 768px) {
+  .map-frame {
+    height: 400px;
+  }
+
+  .quick-buttons-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+/* Large Tablet / Desktop (769px to 1024px+) */
+@media (min-width: 769px) {
+  .map-frame {
+    height: 480px;
+  }
+}
+
+
 
 
 
