@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Bus, MapPin, Radio, Clock, ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Clock, MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
 // Fix Leaflet standard default icon issue in Vite
@@ -38,16 +38,30 @@ const createBusIcon = (isLive) => {
 function MapRecenter({ center }) {
   const map = useMap();
   useEffect(() => {
-    if (center && center[0] && center[1]) {
-      map.flyTo(center, 15, { duration: 1.5 });
+    if (
+      center && 
+      Array.isArray(center) && 
+      typeof center[0] === 'number' && 
+      typeof center[1] === 'number' && 
+      !isNaN(center[0]) && 
+      !isNaN(center[1])
+    ) {
+      try {
+        map.flyTo(center, 15, { duration: 1.5 });
+      } catch (err) {
+        console.warn("Map flyTo error:", err);
+      }
     }
   }, [center, map]);
   return null;
 }
 
 export default function BusMap({ busData }) {
-  const latitude = busData?.latitude || 17.4399; // Default Hyderabad coordinates
-  const longitude = busData?.longitude || 78.4983;
+  const rawLat = Number(busData?.latitude);
+  const rawLng = Number(busData?.longitude);
+
+  const latitude = (!isNaN(rawLat) && rawLat !== 0) ? rawLat : 17.4399; // Default Hyderabad coordinates
+  const longitude = (!isNaN(rawLng) && rawLng !== 0) ? rawLng : 78.4983;
   const isLive = busData?.status === 'LIVE';
   const position = [latitude, longitude];
 
