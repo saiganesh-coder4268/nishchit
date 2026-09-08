@@ -3,7 +3,7 @@
     "buses": {
       "$busId": {
         ".read": true,
-        ".write": "data.child('isDemoMode').val() == true || newData.child('isDemoMode').val() == true || (auth != null && root.child('users').child(auth.uid).child('role').val() == 'driver' && root.child('users').child(auth.uid).child('busId').val() == $busId && root.child('users').child(auth.uid).child('verificationStatus').val() == 'VERIFIED')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'driver' && root.child('users').child(auth.uid).child('busId').val() == $busId && root.child('users').child(auth.uid).child('verificationStatus').val() == 'VERIFIED'",
         "status": {
           ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'LIVE' || newData.val() == 'COMPLETED')"
         },
@@ -47,7 +47,7 @@
       "$busId": {
         ".read": true,
         "$messageId": {
-          ".write": "auth != null || newData.child('senderId').val() != null",
+          ".write": "auth != null && (newData.child('senderId').val() == auth.uid || auth.uid == 'demo-driver-001' || auth.uid == 'demo-parent-001')",
           "message": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 500"
           },
@@ -60,7 +60,7 @@
     "reports": {
       ".read": "auth != null",
       "$reportId": {
-        ".write": "auth != null || newData.child('parentId').val() != null",
+        ".write": "auth != null && newData.child('parentId').val() == auth.uid",
         "type": {
           ".validate": "newData.isString()"
         }

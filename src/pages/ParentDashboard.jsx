@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
-import NishchitAssistant from '../components/NishchitAssistant';
 import { Button, StatusIndicator } from '../components/ui';
 import { subscribeBusState } from '../utils/busSync';
 import { ref, onValue, push } from 'firebase/database';
@@ -220,10 +219,7 @@ export default function ParentDashboard() {
           </div>
         )}
 
-        {/* Secondary AI Transport Assistant Widget */}
-        <div className="assistant-wrapper-secondary">
-          <NishchitAssistant busData={busData} currentUser={currentUser} />
-        </div>
+
 
         {/* Report Issue Modal */}
         {showReportModal && (
