@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserCheck, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function ParentLogin() {
-  const { loginWithCredentials, signupWithCredentials, quickDemoLogin } = useAuth();
+  const { currentUser, loginWithCredentials, signupWithCredentials, quickDemoLogin } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === 'parent') {
+        navigate('/parent/dashboard', { replace: true });
+      } else {
+        navigate('/driver/dashboard', { replace: true });
+      }
+    }
+  }, [currentUser, navigate]);
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');

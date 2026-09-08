@@ -14,6 +14,30 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+const getFriendlyErrorMessage = (error) => {
+  if (!error) return "An unexpected authentication error occurred.";
+  const code = error.code || error.message || '';
+  if (code.includes('auth/invalid-credential') || code.includes('auth/user-not-found') || code.includes('auth/wrong-password')) {
+    return "Invalid email address or password. Please check your credentials.";
+  }
+  if (code.includes('auth/email-already-in-use')) {
+    return "An account with this email address already exists. Please login instead.";
+  }
+  if (code.includes('auth/weak-password')) {
+    return "Password is too weak. Please use at least 6 characters.";
+  }
+  if (code.includes('auth/invalid-email')) {
+    return "Please enter a valid email address.";
+  }
+  if (code.includes('auth/too-many-requests')) {
+    return "Access temporarily blocked due to repeated failed attempts. Please try again later.";
+  }
+  if (code.includes('auth/network-request-failed')) {
+    return "Network error. Please check your internet connection.";
+  }
+  return error.message || "Authentication failed. Please check credentials.";
+};
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -79,12 +103,14 @@ export function AuthProvider({ children }) {
     seedDefaultBus();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (isLoggingOutRef.current) {
+        localStorage.removeItem('nishchit_demo_user');
         setCurrentUser(null);
         isLoggingOutRef.current = false;
         setLoading(false);
         return;
       }
       if (user) {
+        localStorage.removeItem('nishchit_demo_user');
         // Fetch user profile from database
         try {
           const userRef = ref(database, `users/${user.uid}`);
@@ -107,8 +133,17 @@ export function AuthProvider({ children }) {
           console.error("Error fetching user profile:", err);
         }
       } else {
-        // Maintain local demo state if logged in via demo button
-        setCurrentUser(prev => (prev?.uid?.startsWith('demo-') ? prev : null));
+        // Check stored demo session for persistent reload state
+        const storedDemo = localStorage.getItem('nishchit_demo_user');
+        if (storedDemo) {
+          try {
+            setCurrentUser(JSON.parse(storedDemo));
+          } catch {
+            setCurrentUser(null);
+          }
+        } else {
+          setCurrentUser(null);
+        }
       }
       setLoading(false);
     });
@@ -117,71 +152,91 @@ export function AuthProvider({ children }) {
   }, []);
 
   const loginWithCredentials = async (email, password, expectedRole) => {
+    const formattedEmail = (email || '').trim().toLowerCase();
+
     // Quick match for demo accounts
-    if (email === 'driver@nishchit.app' || (email === 'driver' && password === 'driver123')) {
+    if (formattedEmail === 'driver@nishchit.app' || (formattedEmail === 'driver' && password === 'driver123')) {
       if (expectedRole !== 'driver') {
         throw new Error("Role mismatch: Driver account cannot access Parent portal.");
       }
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_DRIVER));
       setCurrentUser(DEMO_DRIVER);
       return DEMO_DRIVER;
     }
-    if (email === 'parent@nishchit.app' || (email === 'parent' && password === 'parent123')) {
+    if (formattedEmail === 'parent@nishchit.app' || (formattedEmail === 'parent' && password === 'parent123')) {
       if (expectedRole !== 'parent') {
         throw new Error("Role mismatch: Parent account cannot access Driver portal.");
       }
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_PARENT));
       setCurrentUser(DEMO_PARENT);
       return DEMO_PARENT;
     }
 
-    const res = await signInWithEmailAndPassword(auth, email, password);
-    const userRef = ref(database, `users/${res.user.uid}`);
-    const snapshot = await get(userRef);
-    let profile = snapshot.exists() ? snapshot.val() : null;
+    try {
+      const res = await signInWithEmailAndPassword(auth, formattedEmail, password);
+      const userRef = ref(database, `users/${res.user.uid}`);
+      const snapshot = await get(userRef);
+      let profile = snapshot.exists() ? snapshot.val() : null;
 
-    if (profile && profile.role !== expectedRole) {
-      await signOut(auth);
-      throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}.`);
+      if (profile && profile.role !== expectedRole) {
+        await signOut(auth);
+        throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}.`);
+      }
+
+      if (!profile) {
+        profile = {
+          uid: res.user.uid,
+          email: res.user.email,
+          name: res.user.email.split('@')[0],
+          role: expectedRole,
+          busId: 'BUS24',
+          routeId: 'ROUTE04',
+          verificationStatus: expectedRole === 'driver' ? 'VERIFIED' : undefined
+        };
+        await set(userRef, profile);
+      }
+
+      localStorage.removeItem('nishchit_demo_user');
+      setCurrentUser(profile);
+      return profile;
+    } catch (err) {
+      if (err.message && err.message.startsWith("Role mismatch:")) {
+        throw err;
+      }
+      throw new Error(getFriendlyErrorMessage(err));
     }
-
-    if (!profile) {
-      profile = {
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.email.split('@')[0],
-        role: expectedRole,
-        busId: 'BUS24',
-        routeId: 'ROUTE04',
-        verificationStatus: expectedRole === 'driver' ? 'VERIFIED' : undefined
-      };
-      await set(userRef, profile);
-    }
-
-    setCurrentUser(profile);
-    return profile;
   };
 
   const signupWithCredentials = async (email, password, role, extraData) => {
-    const res = await createUserWithEmailAndPassword(auth, email, password);
-    const profile = {
-      uid: res.user.uid,
-      email: res.user.email,
-      role,
-      busId: extraData.busId || 'BUS24',
-      routeId: extraData.routeId || 'ROUTE04',
-      name: extraData.name || email.split('@')[0],
-      verificationStatus: role === 'driver' ? 'VERIFIED' : undefined,
-      ...extraData
-    };
-    await set(ref(database, `users/${res.user.uid}`), profile);
-    setCurrentUser(profile);
-    return profile;
+    try {
+      const formattedEmail = (email || '').trim().toLowerCase();
+      const res = await createUserWithEmailAndPassword(auth, formattedEmail, password);
+      const profile = {
+        uid: res.user.uid,
+        email: res.user.email,
+        role,
+        busId: extraData.busId || 'BUS24',
+        routeId: extraData.routeId || 'ROUTE04',
+        name: extraData.name || formattedEmail.split('@')[0],
+        verificationStatus: role === 'driver' ? 'VERIFIED' : undefined,
+        ...extraData
+      };
+      await set(ref(database, `users/${res.user.uid}`), profile);
+      localStorage.removeItem('nishchit_demo_user');
+      setCurrentUser(profile);
+      return profile;
+    } catch (err) {
+      throw new Error(getFriendlyErrorMessage(err));
+    }
   };
 
   const quickDemoLogin = (role) => {
     if (role === 'driver') {
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_DRIVER));
       setCurrentUser(DEMO_DRIVER);
       return DEMO_DRIVER;
     } else {
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_PARENT));
       setCurrentUser(DEMO_PARENT);
       return DEMO_PARENT;
     }
@@ -189,11 +244,12 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     isLoggingOutRef.current = true;
+    localStorage.removeItem('nishchit_demo_user');
     setCurrentUser(null);
     try {
       await signOut(auth);
-    } catch {
-      // Ignore
+    } catch (e) {
+      console.warn("Sign out exception caught:", e);
     }
   };
 
@@ -212,4 +268,5 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+
 

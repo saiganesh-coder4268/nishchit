@@ -10,7 +10,14 @@ import DriverDashboard from './pages/DriverDashboard';
 import ParentDashboard from './pages/ParentDashboard';
 import './App.css';
 
-function ProtectedRoute({ children, allowedRole, currentUser }) {
+function ProtectedRoute({ children, allowedRole, currentUser, loading }) {
+  if (loading) {
+    return (
+      <div className="flex-center" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#64748b', fontSize: '1rem', fontWeight: 600 }}>Authenticating session...</p>
+      </div>
+    );
+  }
   if (!currentUser) {
     return <Navigate to={allowedRole === 'driver' ? '/driver/login' : '/parent/login'} replace />;
   }
@@ -21,7 +28,7 @@ function ProtectedRoute({ children, allowedRole, currentUser }) {
 }
 
 function AppContent() {
-  const { currentUser, quickDemoLogin, logout } = useAuth();
+  const { currentUser, quickDemoLogin, logout, loading } = useAuth();
   const navigate = useNavigate();
 
   const handleQuickLogin = (role) => {
@@ -58,7 +65,7 @@ function AppContent() {
           <Route
             path="/driver/dashboard"
             element={
-              <ProtectedRoute allowedRole="driver" currentUser={currentUser}>
+              <ProtectedRoute allowedRole="driver" currentUser={currentUser} loading={loading}>
                 <DriverDashboard currentUser={currentUser} />
               </ProtectedRoute>
             }
@@ -66,7 +73,7 @@ function AppContent() {
           <Route
             path="/parent/dashboard"
             element={
-              <ProtectedRoute allowedRole="parent" currentUser={currentUser}>
+              <ProtectedRoute allowedRole="parent" currentUser={currentUser} loading={loading}>
                 <ParentDashboard currentUser={currentUser} />
               </ProtectedRoute>
             }
