@@ -1,0 +1,54 @@
+{
+  "rules": {
+    "buses": {
+      "$busId": {
+        ".read": true,
+        ".write": "auth != null || data.child('isDemoMode').val() == true",
+        "status": {
+          ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'LIVE' || newData.val() == 'COMPLETED')"
+        },
+        "latitude": {
+          ".validate": "newData.isNumber()"
+        },
+        "longitude": {
+          ".validate": "newData.isNumber()"
+        }
+      }
+    },
+    "drivers": {
+      "$driverId": {
+        ".read": true,
+        ".write": "auth != null && auth.uid == $driverId",
+        "verificationStatus": {
+          ".write": "false"
+        }
+      }
+    },
+    "parents": {
+      "$parentId": {
+        ".read": "auth != null && auth.uid == $parentId",
+        ".write": "auth != null && auth.uid == $parentId"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "messages": {
+      "$busId": {
+        ".read": true,
+        "$messageId": {
+          ".write": true
+        }
+      }
+    },
+    "reports": {
+      ".read": true,
+      "$reportId": {
+        ".write": true
+      }
+    }
+  }
+}

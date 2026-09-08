@@ -1337,6 +1337,112 @@
   gap: 12px;
 }
 
+/* Nishchit AI Assistant Widget */
+.ai-assistant-widget {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1500;
+}
+
+.ai-widget-trigger {
+  background: var(--color-primary);
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.88rem;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s ease;
+}
+
+.ai-widget-trigger:hover {
+  transform: scale(1.04);
+}
+
+.ai-assistant-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  width: 320px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.ai-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-title strong {
+  font-size: 0.95rem;
+  color: var(--color-secondary);
+  display: block;
+}
+
+.ai-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.ai-messages-list {
+  max-height: 220px;
+  min-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-msg {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.ai-msg.bot {
+  background: #eff6ff;
+  color: #1e40af;
+  border-bottom-left-radius: 2px;
+}
+
+.ai-msg.user {
+  background: #f1f5f9;
+  color: var(--text-main);
+  align-self: flex-end;
+  border-bottom-right-radius: 2px;
+}
+
+.ai-input-form {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-input-form input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+
 
 
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
+import NishchitAssistant from '../components/NishchitAssistant';
 import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
@@ -216,6 +217,9 @@ export default function ParentDashboard() {
             />
           </div>
         )}
+
+        {/* AI Assistant Widget */}
+        <NishchitAssistant busData={busData} currentUser={currentUser} />
 
         {/* Report Issue Modal (Milestone 15) */}
         {showReportModal && (
