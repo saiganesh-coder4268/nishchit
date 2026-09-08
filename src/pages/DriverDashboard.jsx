@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import DriverVerificationCard from '../components/DriverVerificationCard';
-import { ref, onValue, update } from 'firebase/database';
+import CommunicationPanel from '../components/CommunicationPanel';
+import { ref, onValue, update, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
   Bus, MapPin, Play, Square, Navigation, AlertTriangle, 
-  CheckCircle2, Clock, Smartphone, MessageSquare, Radio, ShieldCheck 
+  CheckCircle2, Clock, Smartphone, MessageSquare, Radio, ShieldCheck, WifiOff, ToggleLeft, ToggleRight 
 } from 'lucide-react';
+
+// Predefined Simulated GPS Demo Route Coordinates (Urban Hyderabad School Route)
+const DEMO_ROUTE_COORDS = [
+  { lat: 17.4399, lng: 78.4983 }, // Stop 1: Jubilee Hills School Gate
+  { lat: 17.4425, lng: 78.5012 }, // Stop 2: Road No. 36 Junction
+  { lat: 17.4460, lng: 78.5050 }, // Stop 3: Metro Station Crossing
+  { lat: 17.4495, lng: 78.5090 }, // Stop 4: Residential Colony Stop
+  { lat: 17.4530, lng: 78.5130 }, // Stop 5: Central Park Junction
+  { lat: 17.4575, lng: 78.5180 }  // Stop 6: School Campus Main Gate
+];
 
 export default function DriverDashboard() {
   const { currentUser } = useAuth();
@@ -24,37 +35,101 @@ export default function DriverDashboard() {
   });
 
   const [gpsError, setGpsError] = useState(null);
-  const [isWatchActive, setIsWatchActive] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [showCommPanel, setShowCommPanel] = useState(false);
+
   const watchIdRef = useRef(null);
+  const demoIntervalRef = useRef(null);
+  const demoStepRef = useRef(0);
 
   const busId = currentUser?.busId || 'BUS24';
   const driverVerification = currentUser?.verificationStatus || 'VERIFIED';
   const isVerified = driverVerification === 'VERIFIED';
+
+  // Check Firebase Connection State (.info/connected)
+  useEffect(() => {
+    const connRef = ref(database, '.info/connected');
+    const unsubscribe = onValue(connRef, (snap) => {
+      setIsConnected(snap.val() === true);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Realtime Firebase DB Listener for Bus status
   useEffect(() => {
     const busRef = ref(database, `buses/${busId}`);
     const unsubscribe = onValue(busRef, (snapshot) => {
       if (snapshot.exists()) {
-        setBusData(snapshot.val());
+        const val = snapshot.val();
+        setBusData(val);
+        if (val.isDemoMode !== undefined) {
+          setIsDemoMode(val.isDemoMode);
+        }
       }
-    }, (error) => {
-      console.error("Firebase read error:", error);
     });
 
     return () => unsubscribe();
   }, [busId]);
 
-  // Clean up GPS watch on unmount
+  // Clean up watchers and intervals
+  const stopAllTracking = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (demoIntervalRef.current !== null) {
+      clearInterval(demoIntervalRef.current);
+      demoIntervalRef.current = null;
+    }
+  };
+
   useEffect(() => {
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
+    return () => stopAllTracking();
   }, []);
 
-  // START BUS handler (Milestone 6 & 7)
+  // Broadcast automatic quick message to message feed
+  const broadcastAutoMessage = async (text) => {
+    try {
+      const messagesRef = ref(database, `messages/${busId}`);
+      await push(messagesRef, {
+        senderId: currentUser?.uid || 'driver-1',
+        senderName: currentUser?.name || 'Rajesh Kumar',
+        senderRole: 'driver',
+        message: text,
+        timestamp: Date.now(),
+        isQuickMessage: true
+      });
+    } catch (e) {
+      console.warn("Auto broadcast message failed:", e);
+    }
+  };
+
+  // Start Demo Simulated Movement (Milestone 14)
+  const startDemoRouteTracking = (now) => {
+    stopAllTracking();
+    demoStepRef.current = 0;
+
+    const pushDemoPoint = () => {
+      const point = DEMO_ROUTE_COORDS[demoStepRef.current % DEMO_ROUTE_COORDS.length];
+      demoStepRef.current += 1;
+
+      update(ref(database, `buses/${busId}`), {
+        status: 'LIVE',
+        latitude: point.lat,
+        longitude: point.lng,
+        accuracy: 5,
+        lastUpdated: Date.now(),
+        startedAt: busData.startedAt || now,
+        isDemoMode: true
+      }).catch(err => console.error("Demo location update error:", err));
+    };
+
+    pushDemoPoint();
+    demoIntervalRef.current = setInterval(pushDemoPoint, 3500); // Step every 3.5 seconds
+  };
+
+  // START BUS handler (Milestones 6, 7, 12, 14)
   const handleStartBus = () => {
     if (!isVerified) {
       alert("Only verified drivers can start a trip.");
@@ -62,13 +137,21 @@ export default function DriverDashboard() {
     }
 
     setGpsError(null);
+    const now = Date.now();
 
-    if (!navigator.geolocation) {
-      setGpsError("Geolocation is not supported by your browser.");
+    // If Demo Mode is active
+    if (isDemoMode) {
+      startDemoRouteTracking(now);
+      broadcastAutoMessage("🚌 Trip Started: Bus 24 is now LIVE on route [DEMO ROUTE].");
       return;
     }
 
-    // Start browser geolocation tracking
+    // Real GPS Mode
+    if (!navigator.geolocation) {
+      setGpsError("Geolocation is not supported by your browser. Switch to DEMO MODE to demonstrate.");
+      return;
+    }
+
     const options = {
       enableHighAccuracy: true,
       timeout: 15000,
@@ -77,70 +160,66 @@ export default function DriverDashboard() {
 
     const handleSuccess = (position) => {
       const { latitude, longitude, accuracy } = position.coords;
-      const now = Date.now();
+      const updateTime = Date.now();
 
-      // Store in Firebase Realtime DB
       update(ref(database, `buses/${busId}`), {
         status: 'LIVE',
         latitude,
         longitude,
         accuracy: Math.round(accuracy),
-        lastUpdated: now,
+        lastUpdated: updateTime,
         startedAt: busData.startedAt || now,
+        isDemoMode: false,
         driverId: currentUser?.driverId || 'DRV001',
         driverName: currentUser?.name || 'Rajesh Kumar'
-      }).catch(err => console.error("Firebase update failed:", err));
-
-      setIsWatchActive(true);
+      }).catch(err => console.error(err));
     };
 
     const handleError = (err) => {
-      console.warn("GPS Error:", err);
-      let errorMsg = "Unable to get current location.";
+      let errorMsg = "Unable to get GPS location. Switch to DEMO MODE to demonstrate route movement.";
       if (err.code === 1) {
-        errorMsg = "Location access was denied. Please enable location permissions in browser.";
-      } else if (err.code === 2) {
-        errorMsg = "Position unavailable. Please check GPS signal.";
-      } else if (err.code === 3) {
-        errorMsg = "Location request timed out.";
+        errorMsg = "Location access denied. Please allow location permissions or switch to DEMO MODE.";
       }
       setGpsError(errorMsg);
 
-      // Still set trip to LIVE with fallback position so demo can run if GPS fails indoors
-      const now = Date.now();
+      // Fallback update
       update(ref(database, `buses/${busId}`), {
         status: 'LIVE',
-        lastUpdated: now,
-        startedAt: busData.startedAt || now
+        lastUpdated: Date.now(),
+        startedAt: busData.startedAt || now,
+        isDemoMode: false
       }).catch(e => console.error(e));
-      setIsWatchActive(true);
     };
 
-    // First snapshot
     navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
-
-    // Watch position continuous updates
     const id = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
     watchIdRef.current = id;
+
+    broadcastAutoMessage("🚌 Trip Started: Bus 24 is now LIVE on Route 04.");
   };
 
   // END TRIP handler
   const handleEndTrip = () => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    setIsWatchActive(false);
+    stopAllTracking();
 
     const now = Date.now();
     update(ref(database, `buses/${busId}`), {
       status: 'COMPLETED',
       endedAt: now,
       lastUpdated: now
-    }).catch(err => console.error("Firebase end trip failed:", err));
+    }).catch(err => console.error(err));
+
+    broadcastAutoMessage("🏁 Trip Completed: Today's bus trip has arrived safely at school.");
   };
 
-  // Format time display
+  const toggleDemoMode = () => {
+    const nextVal = !isDemoMode;
+    setIsDemoMode(nextVal);
+    update(ref(database, `buses/${busId}`), {
+      isDemoMode: nextVal
+    }).catch(e => console.error(e));
+  };
+
   const formatTime = (ts) => {
     if (!ts) return '--:--';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -153,26 +232,47 @@ export default function DriverDashboard() {
   return (
     <div className="driver-dashboard-page">
       <div className="dashboard-container">
-        {/* Verification Card Banner */}
+        {/* Offline Warning (Milestone 13) */}
+        {!isConnected && (
+          <div className="gps-error-banner offline">
+            <WifiOff size={20} />
+            <div className="error-text">
+              <strong>⚠️ CONNECTION LOST</strong>
+              <p>Location updates may be delayed. Reconnecting to network...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Verification Card */}
         <DriverVerificationCard driver={currentUser} busInfo={busData} />
 
-        {/* GPS Permission Warning */}
+        {/* GPS Error Warning */}
         {gpsError && (
           <div className="gps-error-banner">
             <AlertTriangle size={20} />
             <div className="error-text">
-              <strong>LOCATION ACCESS WARNING</strong>
+              <strong>LOCATION WARNING</strong>
               <p>{gpsError}</p>
             </div>
           </div>
         )}
 
-        {/* Main Status & Action Controls */}
+        {/* Status Card & Controls */}
         <div className="card driver-status-card">
           <div className="status-header-bar">
             <div className="bus-identity">
               <h2>{busData.busNumber || 'Bus 24'}</h2>
               <span className="route-pill">{busData.routeNumber || 'Route 04'}</span>
+              
+              {/* GPS / DEMO Mode Switcher (Milestone 14) */}
+              <button
+                onClick={toggleDemoMode}
+                className={`demo-mode-toggle ${isDemoMode ? 'active' : ''}`}
+                title="Toggle between Real GPS and Hackathon Simulated Demo Route"
+              >
+                {isDemoMode ? <ToggleRight size={22} color="#10b981" /> : <ToggleLeft size={22} color="#64748b" />}
+                <span>{isDemoMode ? 'DEMO MODE (ACTIVE)' : 'REAL GPS MODE'}</span>
+              </button>
             </div>
 
             <div className="status-badge-container">
@@ -183,7 +283,7 @@ export default function DriverDashboard() {
               )}
               {isLive && (
                 <span className="status-badge live">
-                  <span className="pulse-dot green" /> BUS IS LIVE
+                  <span className="pulse-dot green" /> BUS IS LIVE {isDemoMode ? '[DEMO]' : ''}
                 </span>
               )}
               {isCompleted && (
@@ -194,7 +294,7 @@ export default function DriverDashboard() {
             </div>
           </div>
 
-          {/* Primary Action Button (START BUS / END TRIP) */}
+          {/* Action Buttons */}
           <div className="action-button-area">
             {isNotStarted && (
               <button
@@ -217,7 +317,7 @@ export default function DriverDashboard() {
 
                   <div className="live-detail-box">
                     <Radio size={16} className="text-success" />
-                    <span>Location Sharing: <strong className="text-success">ACTIVE</strong></span>
+                    <span>Tracking Mode: <strong className="text-success">{isDemoMode ? 'SIMULATED DEMO ROUTE' : 'REAL BROWSER GPS'}</strong></span>
                   </div>
 
                   {busData.lastUpdated && (
@@ -228,13 +328,22 @@ export default function DriverDashboard() {
                   )}
                 </div>
 
-                <button
-                  onClick={handleEndTrip}
-                  className="btn btn-danger btn-huge"
-                >
-                  <Square size={24} fill="currentColor" />
-                  END TRIP
-                </button>
+                <div className="live-buttons-row">
+                  <button
+                    onClick={() => setShowCommPanel(!showCommPanel)}
+                    className="btn btn-primary"
+                  >
+                    <MessageSquare size={18} /> MESSAGE PARENTS
+                  </button>
+
+                  <button
+                    onClick={handleEndTrip}
+                    className="btn btn-danger btn-huge"
+                  >
+                    <Square size={20} fill="currentColor" />
+                    END TRIP
+                  </button>
+                </div>
               </div>
             )}
 
@@ -252,10 +361,21 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* Safety Disclaimer Banner */}
+        {/* Communication Drawer Panel (Milestone 11) */}
+        {(showCommPanel || isLive) && (
+          <div className="comm-panel-container">
+            <CommunicationPanel
+              currentUser={currentUser}
+              busData={busData}
+              onClose={() => setShowCommPanel(false)}
+            />
+          </div>
+        )}
+
+        {/* Safety Disclaimer */}
         <div className="driver-safety-banner">
           <Smartphone size={18} />
-          <span>Driver Safety First: Please do not operate mobile controls or type while driving.</span>
+          <span>Driver Safety First: Please do not operate mobile controls or type while driving. Use one-tap quick status messages.</span>
         </div>
       </div>
     </div>
