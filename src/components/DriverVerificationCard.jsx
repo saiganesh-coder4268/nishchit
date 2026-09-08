@@ -19,17 +19,17 @@ export default function DriverVerificationCard({ driver, busInfo }) {
         </div>
         
         {isVerified && (
-          <div className="status-badge live">
-            <ShieldCheck size={16} /> VERIFIED ✓
+          <div className="status-badge verified">
+            <ShieldCheck size={16} /> VERIFIED
           </div>
         )}
         {isPending && (
           <div className="status-badge pending">
-            <Clock size={16} /> PENDING REVIEW
+            <Clock size={16} /> PENDING
           </div>
         )}
         {isRejected && (
-          <div className="status-badge not-started">
+          <div className="status-badge rejected">
             <ShieldAlert size={16} /> REJECTED
           </div>
         )}
