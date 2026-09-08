@@ -78,6 +78,7 @@ export default function ParentDashboard() {
   };
 
   const statusInfo = getParentStatusInfo(busData, now);
+  const isLive = statusInfo.status === 'LIVE';
   const busNumberText = busData.busNumber || 'BUS 24';
   const routeNumberText = busData.routeNumber || 'ROUTE 04';
 
