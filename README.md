@@ -130,3 +130,35 @@ Nishchit provides **Instant Demo Access** buttons on the landing page and login 
    ```bash
    npm run build
    ```
+
+---
+
+## 🎬 End-to-End Demo Flow
+
+To demonstrate Nishchit live during pitch or evaluation:
+
+1. Open two browser windows or devices side-by-side.
+2. In Window 1: Log in as **Driver** (`driver@nishchit.app` / `driver123`) or click **Instant Driver Demo**.
+3. In Window 2: Log in as **Parent** (`parent@nishchit.app` / `parent123`) or click **Instant Parent Demo**.
+4. In Window 1 (Driver): Tap **START BUS**. The status updates to `🟢 LIVE`.
+5. In Window 2 (Parent): Observe status immediately switch to `🟢 LIVE`, relative update timestamp start ticking, and Google Maps marker pan smooth live position.
+6. In Window 1 (Driver): Tap **Traffic delay** quick announcement.
+7. In Window 2 (Parent): Open communication drawer or observe real-time message arrival.
+8. In Window 1 (Driver): Tap **END TRIP**.
+9. In Window 2 (Parent): Observe status transition to `TRIP COMPLETED`.
+
+---
+
+## 🛡️ Security & Verification Rules
+
+- **Role-Based Access Control**: Drivers cannot access parent dashboards; parents cannot trigger driver start/end controls.
+- **Verification Status**: Only drivers with `verificationStatus === 'VERIFIED'` can activate a trip. Drivers cannot alter their own verification status.
+- **Firebase RTDB Rules (`database.rules.json`)**: Enforces authenticated role-based write limits for `buses/$busId` and `messages/$busId` nodes.
+
+---
+
+## ⚠️ Known Limitations & Design Decisions
+
+- **Demo Route Coordinates**: Simulated demo movement relies on a predefined 6-point urban route loop for indoor/classroom demonstrations when physical GPS is unavailable.
+- **No Student Device**: Nishchit intentionally operates without student smartphone dependencies or student tracking tags.
+
