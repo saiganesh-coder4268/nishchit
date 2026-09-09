@@ -4,37 +4,54 @@
 export function formatAuthError(error) {
   if (!error) return 'An unexpected error occurred. Please try again.';
   
-  const code = error.code || '';
-  const message = error.message || '';
+  const code = (error.code || '').toLowerCase();
+  const message = (error.message || (typeof error === 'string' ? error : '')).toLowerCase();
 
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-    return 'Invalid email or password. Please verify your credentials or register a new account.';
+  if (
+    code.includes('invalid-credential') ||
+    code.includes('wrong-password') ||
+    code.includes('user-not-found') ||
+    message.includes('invalid-credential') ||
+    message.includes('user-not-found')
+  ) {
+    return 'Invalid credentials. If you are a new user, please click "Register" below or verify your password.';
   }
-  if (code === 'auth/email-already-in-use') {
-    return 'This email address is already registered. Please sign in instead.';
+  if (code.includes('email-already-in-use') || message.includes('email-already-in-use')) {
+    return 'This email address is already registered. Please sign in with your password.';
   }
-  if (code === 'auth/weak-password') {
+  if (code.includes('weak-password') || message.includes('weak-password')) {
     return 'Password is too weak. Please use at least 6 characters.';
   }
-  if (code === 'auth/invalid-email') {
+  if (code.includes('invalid-email') || message.includes('invalid-email')) {
     return 'Please enter a valid email address.';
   }
-  if (code === 'auth/popup-closed-by-user') {
+  if (code.includes('popup-closed-by-user') || message.includes('popup-closed')) {
     return 'Sign-in popup was closed before completing.';
   }
-  if (code === 'auth/popup-blocked') {
+  if (code.includes('popup-blocked') || message.includes('popup-blocked')) {
     return 'Sign-in popup was blocked by your browser. Please allow popups for this site.';
   }
-  if (code === 'auth/network-request-failed') {
+  if (code.includes('network-request-failed') || message.includes('network')) {
     return 'Network connection error. Please check your internet connection.';
   }
-  if (code === 'auth/too-many-requests') {
-    return 'Access temporarily disabled due to many failed login attempts. Please reset your password or try again later.';
+  if (code.includes('too-many-requests') || message.includes('too-many-requests')) {
+    return 'Access temporarily disabled due to many failed attempts. Please try again in a few moments.';
   }
-  if (code === 'auth/operation-not-allowed') {
-    return 'This authentication method is not enabled in the project settings.';
+  if (code.includes('operation-not-allowed') || message.includes('operation-not-allowed')) {
+    return 'This authentication method is currently being configured.';
   }
 
-  // Fallback to cleaner message
-  return message.replace(/^Firebase:\s*/i, '').replace(/\s*\([^)]*\)\.?$/, '') || 'Authentication failed.';
+  const raw = error.message || String(error);
+  const cleaned = raw
+    .replace(/^Firebase:\s*/i, '')
+    .replace(/^Error\s*:\s*/i, '')
+    .replace(/\s*\([^)]*\)\.?$/, '')
+    .trim();
+
+  if (!cleaned || cleaned.toLowerCase() === 'error') {
+    return 'Authentication failed. Please verify your email and password or register a new profile.';
+  }
+
+  return cleaned;
 }
+

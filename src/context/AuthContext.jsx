@@ -92,7 +92,26 @@ export function AuthProvider({ children }) {
 
   const loginWithCredentials = async (email, password, expectedRole = 'parent') => {
     const cleanEmail = (email || '').trim();
-    const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
+    let res;
+    try {
+      res = await signInWithEmailAndPassword(auth, cleanEmail, password);
+    } catch (err) {
+      // If user does not exist in Firebase Auth yet, auto-create the account seamlessly
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        try {
+          res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        } catch (createErr) {
+          // If the email is already registered and creation failed, re-throw the original auth error
+          if (createErr.code === 'auth/email-already-in-use') {
+            throw err;
+          }
+          throw createErr;
+        }
+      } else {
+        throw err;
+      }
+    }
+
     let profile = await getUserProfile(res.user.uid);
     
     if (!profile) {
