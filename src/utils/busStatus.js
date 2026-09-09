@@ -69,7 +69,7 @@ export function getParentStatusInfo(busData, now = Date.now()) {
   const lastUpdated = Number(busData?.lastUpdated) || 0;
 
   const formatRelativeTime = (ts) => {
-    if (!ts) return 'recently';
+    if (!ts) return 'no update received';
     const diffSec = Math.floor(Math.max(0, now - ts) / 1000);
     if (diffSec < 5) return 'just now';
     if (diffSec < 60) return `${diffSec} seconds ago`;
@@ -92,7 +92,7 @@ export function getParentStatusInfo(busData, now = Date.now()) {
       return {
         status: 'STALE',
         title: 'LOCATION MAY BE OUTDATED',
-        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Coordinates may not reflect exact live position.`
+        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Displaying last known position.`
       };
 
     case 'UNAVAILABLE':
@@ -104,7 +104,7 @@ export function getParentStatusInfo(busData, now = Date.now()) {
         };
       }
       return {
-        status: 'NOT_STARTED',
+        status: 'UNAVAILABLE',
         title: 'LOCATION UNAVAILABLE',
         subtitle: 'No valid location coordinates received for this bus.'
       };
@@ -113,7 +113,7 @@ export function getParentStatusInfo(busData, now = Date.now()) {
       return {
         status: 'COMPLETED',
         title: 'TRIP COMPLETED',
-        subtitle: "Today's bus trip has ended safely."
+        subtitle: `Today's bus trip has ended safely.${lastUpdated ? ` Last position ${formatRelativeTime(lastUpdated)}.` : ''}`
       };
 
     case 'NOT_STARTED':

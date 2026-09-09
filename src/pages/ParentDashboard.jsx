@@ -34,6 +34,7 @@ export default function ParentDashboard() {
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [isConnected, setIsConnected] = useState(true);
 
   const busId = currentUser?.busId || 'BUS24';
 
@@ -41,6 +42,15 @@ export default function ParentDashboard() {
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Listen to Firebase Connection State (.info/connected)
+  useEffect(() => {
+    const connRef = ref(database, '.info/connected');
+    const unsubscribe = onValue(connRef, (snap) => {
+      setIsConnected(snap.val() === true);
+    });
+    return () => unsubscribe();
   }, []);
 
   // Listen to Bus State updates via Realtime DB + Local Sync Channel
@@ -80,16 +90,16 @@ export default function ParentDashboard() {
   const [focusNotice, setFocusNotice] = useState(null);
 
   const statusInfo = getParentStatusInfo(busData, now);
-  const isLive = statusInfo.status === 'LIVE';
   const busNumberText = busData.busNumber || 'BUS 24';
   const routeNumberText = busData.routeNumber || 'ROUTE 04';
 
   const getToolbarLabel = () => {
-    if (statusInfo.status === 'LIVE') return 'Live Tracking Active';
-    if (statusInfo.status === 'STALE') return 'Last Known Position';
-    if (statusInfo.status === 'UNAVAILABLE') return 'Location Stream Interrupted';
-    if (statusInfo.status === 'COMPLETED') return 'Trip Completed — Final Position';
-    return 'Bus Depot / Parked';
+    const connSuffix = !isConnected ? ' • Offline Sync' : '';
+    if (statusInfo.status === 'LIVE') return `Live Tracking Active${connSuffix}`;
+    if (statusInfo.status === 'STALE') return `Last Known Position (Stale)${connSuffix}`;
+    if (statusInfo.status === 'UNAVAILABLE') return `Location Stream Interrupted${connSuffix}`;
+    if (statusInfo.status === 'COMPLETED') return `Trip Completed — Final Position${connSuffix}`;
+    return `Bus Depot / Parked${connSuffix}`;
   };
 
   const handleFocusBus = () => {
@@ -98,12 +108,17 @@ export default function ParentDashboard() {
       setTimeout(() => setFocusNotice(null), 3000);
       return;
     }
-    if (statusInfo.status === 'UNAVAILABLE' && !busData?.latitude) {
+    if (statusInfo.status === 'UNAVAILABLE') {
       setFocusNotice("Bus location is currently unavailable.");
       setTimeout(() => setFocusNotice(null), 3000);
       return;
     }
-    setFocusNotice(null);
+    if (statusInfo.status === 'STALE') {
+      setFocusNotice("Focusing last known position (Stale)");
+      setTimeout(() => setFocusNotice(null), 3500);
+    } else {
+      setFocusNotice(null);
+    }
     setFocusTrigger((prev) => prev + 1);
   };
 

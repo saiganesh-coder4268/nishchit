@@ -16,7 +16,7 @@ const DEFAULT_BUS_STATE = {
   latitude: 17.4399,
   longitude: 78.4983,
   accuracy: 10,
-  lastUpdated: Date.now(),
+  lastUpdated: null,
   startedAt: null,
   endedAt: null,
   isDemoMode: false
@@ -59,7 +59,8 @@ export async function updateBusState(busId = 'BUS24', patchObj) {
 
   // Validate coordinates if supplied in patch
   const cleanPatch = { ...patchObj };
-  if (cleanPatch.latitude !== undefined || cleanPatch.longitude !== undefined) {
+  const hasNewCoords = cleanPatch.latitude !== undefined || cleanPatch.longitude !== undefined;
+  if (hasNewCoords) {
     const checkLat = cleanPatch.latitude !== undefined ? cleanPatch.latitude : currentState.latitude;
     const checkLng = cleanPatch.longitude !== undefined ? cleanPatch.longitude : currentState.longitude;
     if (!isValidCoordinate(checkLat, checkLng)) {
@@ -69,10 +70,18 @@ export async function updateBusState(busId = 'BUS24', patchObj) {
     }
   }
 
+  // Preserve existing timestamp unless explicit timestamp passed or new position coordinates supplied
+  let targetLastUpdated = currentState.lastUpdated;
+  if (cleanPatch.lastUpdated !== undefined) {
+    targetLastUpdated = cleanPatch.lastUpdated;
+  } else if (hasNewCoords || cleanPatch.status === 'LIVE' || cleanPatch.status === 'COMPLETED') {
+    targetLastUpdated = now;
+  }
+
   const newState = {
     ...currentState,
     ...cleanPatch,
-    lastUpdated: cleanPatch.lastUpdated || now
+    lastUpdated: targetLastUpdated
   };
 
   saveStoredBusState(busId, newState);

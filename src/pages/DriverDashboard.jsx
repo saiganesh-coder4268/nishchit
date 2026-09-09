@@ -39,6 +39,7 @@ export default function DriverDashboard() {
 
   const [gpsError, setGpsError] = useState(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [showCommPanel, setShowCommPanel] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -358,6 +359,11 @@ export default function DriverDashboard() {
           </div>
 
           <div className="state-summary-row">
+            {!isConnected && (
+              <span className="network-offline-badge" style={{ fontSize: '0.78rem', color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fef3c7', fontWeight: 600, display: 'inline-block', marginBottom: '8px' }}>
+                Offline Mode (Local Broadcast)
+              </span>
+            )}
             {isNotStarted && (
               <StatusIndicator 
                 status={isStarting ? "PENDING" : "NOT_STARTED"} 

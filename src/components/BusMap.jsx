@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
-import { ShieldCheck, Clock, MapPin, Bus } from 'lucide-react';
+import { ShieldCheck, Clock, Bus } from 'lucide-react';
 import { isValidCoordinate, calculateLocationFreshness } from '../utils/busStatus';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAdBCvhV_RinMaCyH0xs2yWYvFZ1t_rmCM";
@@ -63,7 +63,6 @@ export default function BusMap({ busData }) {
   const isStale = tripStatus === 'LIVE' && freshness === 'STALE';
   const isUnavailable = tripStatus === 'LIVE' && freshness === 'UNAVAILABLE';
   const isCompleted = tripStatus === 'COMPLETED';
-  const isNotStarted = tripStatus === 'NOT_STARTED';
 
   const center = { lat: latitude, lng: longitude };
 
@@ -83,7 +82,7 @@ export default function BusMap({ busData }) {
   }, [map, latitude, longitude]);
 
   const formatTime = (ts) => {
-    if (!ts) return 'No timestamp';
+    if (!ts) return 'No update received';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
