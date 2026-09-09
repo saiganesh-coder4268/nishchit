@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, AlertCircle, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Bus, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function DriverLogin() {
-  const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials, quickDemoLogin } = useAuth();
+  const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -79,11 +79,6 @@ export default function DriverLogin() {
     }
   };
 
-  const handleDemoLogin = () => {
-    quickDemoLogin('driver');
-    navigate('/driver/dashboard');
-  };
-
   return (
     <div className="auth-page">
       <div className="auth-container">
@@ -96,22 +91,6 @@ export default function DriverLogin() {
         <div className="auth-header">
           <h1>{isSignUp ? 'Driver Registration' : 'Driver Sign In'}</h1>
           <p>Andhra Pradesh School & College Transport Network</p>
-        </div>
-
-        {/* Demo Fast-Track Box */}
-        <div className="auth-demo-box">
-          <div className="demo-box-content">
-            <span className="demo-badge">Approved Demo Driver</span>
-            <strong>Rajesh Kumar • Bus 24 (MVGR College)</strong>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="btn btn-outline btn-sm"
-          >
-            Instant Demo Access <ArrowRight size={14} />
-          </button>
         </div>
 
         {error && (

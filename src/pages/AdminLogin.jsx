@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, AlertCircle, ArrowRight, Building2, Lock } from 'lucide-react';
+import { ShieldCheck, AlertCircle, Building2, Lock } from 'lucide-react';
 
 export default function AdminLogin() {
-  const { currentUser, loginWithCredentials, quickDemoLogin } = useAuth();
+  const { currentUser, loginWithCredentials } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,11 +40,6 @@ export default function AdminLogin() {
     }
   };
 
-  const handleDemoLogin = () => {
-    quickDemoLogin('admin');
-    navigate('/admin/dashboard');
-  };
-
   return (
     <div className="auth-page">
       <div className="auth-container">
@@ -57,22 +52,6 @@ export default function AdminLogin() {
         <div className="auth-header">
           <h1>Transport Authority Sign In</h1>
           <p>Corridor Fleet Control, Driver Approvals & Route Management</p>
-        </div>
-
-        {/* Demo Fast-Track Box */}
-        <div className="auth-demo-box">
-          <div className="demo-box-content">
-            <span className="demo-badge">Transport Officer Demo</span>
-            <strong>K. Ramakrishna • Chief Transport Officer</strong>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="btn btn-outline btn-sm"
-          >
-            Instant Admin Access <ArrowRight size={14} />
-          </button>
         </div>
 
         {error && (

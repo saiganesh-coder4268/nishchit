@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserCheck, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { UserCheck, AlertCircle, ShieldCheck } from 'lucide-react';
 import { REGISTERED_INSTITUTIONS } from '../data/regionData';
 
 export default function ParentLogin() {
-  const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials, quickDemoLogin } = useAuth();
+  const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,12 +41,10 @@ export default function ParentLogin() {
         const inst = REGISTERED_INSTITUTIONS.find(i => i.id === institutionId) || REGISTERED_INSTITUTIONS[0];
         await signupWithCredentials(email, password, 'parent', {
           name: parentName,
-          studentName,
+          childName: studentName,
           studentRollNo,
           institutionId,
           institutionName: inst.name,
-          busId: 'BUS-24',
-          routeId: 'ROUTE-VZ04',
           stopName
         });
       } else {
@@ -74,11 +72,6 @@ export default function ParentLogin() {
     }
   };
 
-  const handleDemoLogin = () => {
-    quickDemoLogin('parent');
-    navigate('/parent/dashboard');
-  };
-
   return (
     <div className="auth-page">
       <div className="auth-container">
@@ -91,22 +84,6 @@ export default function ParentLogin() {
         <div className="auth-header">
           <h1>{isSignUp ? 'Parent Account Registration' : 'Parent Sign In'}</h1>
           <p>Real-time school & college bus tracking for parents.</p>
-        </div>
-
-        {/* Demo Fast-Track Box */}
-        <div className="auth-demo-box">
-          <div className="demo-box-content">
-            <span className="demo-badge">Demo Access</span>
-            <strong>Parent: Suresh Varma (Aarav • Bus 24)</strong>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="btn btn-outline btn-sm"
-          >
-            Instant Demo Access <ArrowRight size={14} />
-          </button>
         </div>
 
         {error && (

@@ -506,22 +506,9 @@ export default function DriverOnboarding() {
                   <Bus size={18} /> Enter Driver Operational Cockpit
                 </button>
               ) : (
-                <div className="hackathon-demo-approval-banner">
-                  <div className="banner-text">
-                    <Sparkles size={18} color="#2563eb" />
-                    <div>
-                      <strong>Hackathon Showcase Fast-Track</strong>
-                      <p>Admins approve drivers in the Admin Portal, or you can instantly approve for this demo session.</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={handleInstantHackathonApproval}
-                    className="btn btn-success"
-                  >
-                    {loading ? 'Approving...' : 'Approve Driver for Demo'}
-                  </button>
+                <div className="verification-awaiting">
+                  <ShieldCheck size={20} />
+                  <div><strong>Verification pending</strong><p>Your transport administrator will review your details and create an assignment when approved.</p></div>
                 </div>
               )}
             </div>

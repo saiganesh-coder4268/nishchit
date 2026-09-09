@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
-import { ShieldCheck, Clock, Bus } from 'lucide-react';
+import { ShieldCheck, Clock, Bus, MapPin } from 'lucide-react';
 import { isValidCoordinate, calculateLocationFreshness } from '../utils/busStatus';
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAdBCvhV_RinMaCyH0xs2yWYvFZ1t_rmCM";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const containerStyle = {
   width: '100%',
@@ -54,8 +54,8 @@ export default function BusMap({ busData }) {
   const rawLng = Number(busData?.longitude);
   const hasValidCoords = isValidCoordinate(rawLat, rawLng);
 
-  const latitude = hasValidCoords ? rawLat : 17.4399; // Default Hyderabad fallback
-  const longitude = hasValidCoords ? rawLng : 78.4983;
+  const latitude = hasValidCoords ? rawLat : null;
+  const longitude = hasValidCoords ? rawLng : null;
   const freshness = calculateLocationFreshness(busData, now);
   const tripStatus = busData?.status || 'NOT_STARTED';
 
@@ -64,7 +64,7 @@ export default function BusMap({ busData }) {
   const isUnavailable = tripStatus === 'LIVE' && freshness === 'UNAVAILABLE';
   const isCompleted = tripStatus === 'COMPLETED';
 
-  const center = { lat: latitude, lng: longitude };
+  const center = hasValidCoords ? { lat: latitude, lng: longitude } : null;
 
   const onLoad = useCallback((mapInstance) => {
     setMap(mapInstance);
@@ -86,6 +86,9 @@ export default function BusMap({ busData }) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  if (!GOOGLE_MAPS_API_KEY) {
+    return <div className="bus-map-wrapper map-empty-state"><Bus size={28}/><strong>Map is not configured yet</strong><p>Your institution can enable tracking once its Google Maps key is configured.</p></div>;
+  }
   if (loadError) {
     return (
       <div className="bus-map-wrapper flex-center" style={{ padding: '40px', textAlign: 'center', background: '#f8fafc' }}>
@@ -103,6 +106,10 @@ export default function BusMap({ busData }) {
         </div>
       </div>
     );
+  }
+
+  if (!center) {
+    return <div className="bus-map-wrapper map-empty-state"><MapPin size={28}/><strong>No location has been shared yet</strong><p>The map will appear after the assigned driver starts an authorized trip.</p></div>;
   }
 
   const getStatusText = () => {
@@ -148,7 +155,7 @@ export default function BusMap({ busData }) {
             >
               <div className="popup-content" style={{ fontFamily: 'Inter, sans-serif', padding: '4px', minWidth: '210px' }}>
                 <div className="popup-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
-                  <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{busData?.busNumber || 'Bus 24'}</strong>
+                  <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{busData?.busNumber || 'Assigned vehicle'}</strong>
                   <span className="popup-route" style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
                     {busData?.routeNumber || 'Route 04'}
                   </span>
@@ -157,7 +164,7 @@ export default function BusMap({ busData }) {
                 <div className="popup-details" style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div className="popup-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <ShieldCheck size={14} color="#10b981" />
-                    <span>Driver: <strong>{busData?.driverName || 'Rajesh Kumar'}</strong></span>
+                    <span>Driver: <strong>{busData?.driverName || 'Assigned driver'}</strong></span>
                   </div>
 
                   <div className="popup-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

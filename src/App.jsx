@@ -6,11 +6,11 @@ import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
 import DriverLogin from './pages/DriverLogin';
 import DriverOnboarding from './pages/DriverOnboarding';
-import DriverDashboard from './pages/DriverDashboard';
+import DriverDashboard from './pages/DriverWorkspace';
 import ParentLogin from './pages/ParentLogin';
-import ParentDashboard from './pages/ParentDashboard';
+import ParentDashboard from './pages/ParentWorkspace';
 import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
+import AdminDashboard from './pages/AdminWorkspace';
 import './App.css';
 
 function ProtectedRoute({ children, allowedRole, currentUser, loading }) {
@@ -35,19 +35,8 @@ function ProtectedRoute({ children, allowedRole, currentUser, loading }) {
 }
 
 function AppContent() {
-  const { currentUser, quickDemoLogin, logout, loading } = useAuth();
+  const { currentUser, logout, loading } = useAuth();
   const navigate = useNavigate();
-
-  const handleQuickLogin = (role) => {
-    quickDemoLogin(role);
-    if (role === 'driver') {
-      navigate('/driver/dashboard');
-    } else if (role === 'admin') {
-      navigate('/admin/dashboard');
-    } else {
-      navigate('/parent/dashboard');
-    }
-  };
 
   const handleLogout = () => {
     logout();
@@ -61,7 +50,7 @@ function AppContent() {
         <Routes>
           <Route
             path="/"
-            element={<LandingPage onQuickLogin={handleQuickLogin} />}
+            element={<LandingPage />}
           />
           
           {/* DRIVER PORTAL */}
