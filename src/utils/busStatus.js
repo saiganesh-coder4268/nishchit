@@ -84,15 +84,15 @@ export function getParentStatusInfo(busData, now = Date.now()) {
     case 'LIVE':
       return {
         status: 'LIVE',
-        title: 'BUS IS LIVE',
-        subtitle: `Bus is moving — Last updated ${formatRelativeTime(lastUpdated)}`
+        title: 'ON THE WAY',
+        subtitle: `Bus is moving — Updated ${formatRelativeTime(lastUpdated)}`
       };
 
     case 'STALE':
       return {
         status: 'STALE',
         title: 'LOCATION MAY BE OUTDATED',
-        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Displaying last known position.`
+        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Showing last known position.`
       };
 
     case 'UNAVAILABLE':
@@ -120,8 +120,8 @@ export function getParentStatusInfo(busData, now = Date.now()) {
     default:
       return {
         status: 'NOT_STARTED',
-        title: 'BUS NOT STARTED',
-        subtitle: "Your bus hasn't started its trip yet."
+        title: 'TRIP NOT STARTED',
+        subtitle: "The bus has not departed yet today."
       };
   }
 }

@@ -2,49 +2,59 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
-import { Button, StatusIndicator } from '../components/ui';
-import { subscribeBusState } from '../utils/busSync';
+import { Button } from '../components/ui';
+import { subscribeSingleBus, submitIncidentReport } from '../utils/transportService';
 import { getParentStatusInfo } from '../utils/busStatus';
-import { ref, push } from 'firebase/database';
+import { INITIAL_ROUTES } from '../data/regionData';
+import { ref, onValue } from 'firebase/database';
 import { database } from '../firebase';
 import { 
-  MessageSquare, AlertCircle, 
-  MapPin, CheckCircle2, X, Navigation 
+  MessageSquare, AlertCircle, MapPin, CheckCircle2, 
+  X, Navigation, Phone, ShieldCheck, UserCheck, Clock, Building2, Radio
 } from 'lucide-react';
 
 export default function ParentDashboard() {
   const { currentUser } = useAuth();
+  const busId = currentUser?.busId || 'BUS-24';
+  const routeId = currentUser?.routeId || 'ROUTE-VZ04';
+
   const [busData, setBusData] = useState({
     busNumber: 'Bus 24',
-    routeNumber: 'Route 04',
+    registrationNumber: 'AP 35 U 2424',
+    routeName: 'Route 04 (Vizianagaram RTC Complex -> MVGR Campus)',
+    routeNumber: 'ROUTE 04',
     status: 'NOT_STARTED',
-    latitude: 17.4399,
-    longitude: 78.4983,
-    accuracy: 10,
+    latitude: 18.1145,
+    longitude: 83.4021,
+    accuracy: 8,
+    speed: 0,
     startedAt: null,
     endedAt: null,
     lastUpdated: null,
-    isDemoMode: false
+    driverName: 'Rajesh Kumar',
+    driverPhone: '+91 98765 43210'
   });
 
   const [showCommPanel, setShowCommPanel] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportType, setReportType] = useState('Bus hasn\'t moved');
+  const [reportType, setReportType] = useState("Bus hasn't moved / Delay");
   const [reportDesc, setReportDesc] = useState('');
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [focusNotice, setFocusNotice] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
 
-  const busId = currentUser?.busId || 'BUS24';
+  // Active route details
+  const activeRoute = INITIAL_ROUTES.find(r => r.id === routeId) || INITIAL_ROUTES[0];
 
-  // Timer to keep relative time updated
+  // Refresh relative time
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5000);
+    const timer = setInterval(() => setNow(Date.now()), 4000);
     return () => clearInterval(timer);
   }, []);
 
-  // Listen to Firebase Connection State (.info/connected)
+  // Firebase connection state
   useEffect(() => {
     const connRef = ref(database, '.info/connected');
     const unsubscribe = onValue(connRef, (snap) => {
@@ -53,28 +63,27 @@ export default function ParentDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Listen to Bus State updates via Realtime DB + Local Sync Channel
+  // Realtime subscription to the assigned bus
   useEffect(() => {
-    const unsubscribe = subscribeBusState(busId, (val) => {
+    const unsubscribe = subscribeSingleBus(busId, (val) => {
       if (val) {
-        setBusData(val);
+        setBusData(prev => ({ ...prev, ...val }));
       }
     });
-
     return () => unsubscribe();
   }, [busId]);
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
     try {
-      await push(ref(database, 'reports'), {
-        parentId: currentUser?.uid || 'parent-1',
-        parentName: currentUser?.name || 'Demo Parent',
+      await submitIncidentReport({
+        parentId: currentUser?.uid || 'demo-parent-001',
+        parentName: currentUser?.name || 'Suresh Varma',
+        studentName: currentUser?.studentName || 'Aarav Varma',
         busId,
+        routeId,
         type: reportType,
-        description: reportDesc,
-        timestamp: Date.now(),
-        status: 'SUBMITTED'
+        description: reportDesc
       });
       setReportSubmitted(true);
       setTimeout(() => {
@@ -87,37 +96,15 @@ export default function ParentDashboard() {
     }
   };
 
-  const [focusNotice, setFocusNotice] = useState(null);
-
   const statusInfo = getParentStatusInfo(busData, now);
-  const busNumberText = busData.busNumber || 'BUS 24';
-  const routeNumberText = busData.routeNumber || 'ROUTE 04';
-
-  const getToolbarLabel = () => {
-    const connSuffix = !isConnected ? ' • Offline Sync' : '';
-    if (statusInfo.status === 'LIVE') return `Live Tracking Active${connSuffix}`;
-    if (statusInfo.status === 'STALE') return `Last Known Position (Stale)${connSuffix}`;
-    if (statusInfo.status === 'UNAVAILABLE') return `Location Stream Interrupted${connSuffix}`;
-    if (statusInfo.status === 'COMPLETED') return `Trip Completed — Final Position${connSuffix}`;
-    return `Bus Depot / Parked${connSuffix}`;
-  };
 
   const handleFocusBus = () => {
     if (statusInfo.status === 'NOT_STARTED') {
-      setFocusNotice("Bus has not started today's trip yet.");
+      setFocusNotice("Bus is currently parked at depot/starting terminal.");
       setTimeout(() => setFocusNotice(null), 3000);
-      return;
-    }
-    if (statusInfo.status === 'UNAVAILABLE') {
-      setFocusNotice("Bus location is currently unavailable.");
-      setTimeout(() => setFocusNotice(null), 3000);
-      return;
-    }
-    if (statusInfo.status === 'STALE') {
-      setFocusNotice("Focusing last known position (Stale)");
-      setTimeout(() => setFocusNotice(null), 3500);
     } else {
-      setFocusNotice(null);
+      setFocusNotice("Focusing live bus location on Google Maps...");
+      setTimeout(() => setFocusNotice(null), 2500);
     }
     setFocusTrigger((prev) => prev + 1);
   };
@@ -126,47 +113,95 @@ export default function ParentDashboard() {
     <div className="parent-dashboard-page">
       <div className="dashboard-container">
 
-        {/* Top Status & Information Panel */}
-        <div className="parent-status-panel">
-          <div className="status-identity">
-            <div className="bus-identifiers">
-              <span className="bus-number-title">{busNumberText}</span>
-              <span className="route-badge">{routeNumberText}</span>
+        {/* 1. STUDENT & VEHICLE CERTAINTY BANNER */}
+        <div className="student-certainty-card">
+          <div className="student-info-row">
+            <div className="student-avatar-badge">
+              <UserCheck size={24} color="#2563eb" />
             </div>
-
-            <div className="status-indicator-group">
-              <StatusIndicator status={statusInfo.status} label={statusInfo.title} />
+            <div className="student-details">
+              <div className="student-name-row">
+                <h2>{currentUser?.studentName || 'Aarav Varma'}</h2>
+                <span className="roll-badge">{currentUser?.studentRollNo || '22331A0589'}</span>
+              </div>
+              <p className="inst-subhead">
+                <Building2 size={14} className="icon-inline" />
+                {currentUser?.institutionName || "MVGR College of Engineering (Autonomous), Vizianagaram"}
+              </p>
             </div>
           </div>
 
-          <div className="status-subtitle-row">
-            <p className={`subtitle-text ${statusInfo.status === 'STALE' ? 'text-stale' : ''}`}>
-              {statusInfo.subtitle}
-            </p>
+          <div className="assigned-transport-grid">
+            <div className="trans-box">
+              <span className="trans-label">Assigned Vehicle</span>
+              <strong>{busData.busNumber || 'Bus 24'}</strong>
+              <code>{busData.registrationNumber || 'AP 35 U 2424'}</code>
+            </div>
+
+            <div className="trans-box">
+              <span className="trans-label">Assigned Route</span>
+              <strong>{busData.routeNumber || 'Route 04'}</strong>
+              <span className="stop-name-tag">Stop: {currentUser?.stopName || 'Mayuri Junction'}</span>
+            </div>
+
+            <div className="trans-box">
+              <span className="trans-label">Authorized Driver</span>
+              <strong>{busData.driverName || 'Rajesh Kumar'}</strong>
+              <a href={`tel:${busData.driverPhone || '+919876543210'}`} className="driver-phone-link">
+                <Phone size={12} /> {busData.driverPhone || '+91 98765 43210'}
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* Centerpiece Google Map Container */}
+        {/* 2. REAL-TIME TRIP STATUS BAR */}
+        <div className={`parent-trip-status-card status-${statusInfo.status.toLowerCase()}`}>
+          <div className="status-main-col">
+            <div className="status-header-line">
+              <span className={`status-pill ${statusInfo.status.toLowerCase()}`}>
+                {statusInfo.status === 'LIVE' && <span className="pulse-dot-green"></span>}
+                {statusInfo.title}
+              </span>
+              {!isConnected && <span className="offline-pill">• Syncing</span>}
+            </div>
+            <p className="status-desc-text">{statusInfo.subtitle}</p>
+          </div>
+
+          <div className="status-telemetry-col">
+            {statusInfo.status === 'LIVE' && (
+              <div className="telem-badge">
+                <Radio size={14} color="#16a34a" />
+                <span>Live GPS Feed Active</span>
+              </div>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleFocusBus}
+              icon={Navigation}
+            >
+              Focus on Map
+            </Button>
+          </div>
+        </div>
+
+        {/* 3. CENTERPIECE GOOGLE MAP */}
         <div className="parent-map-section">
           <div className="map-toolbar">
             <div className="map-toolbar-info">
-              <MapPin size={16} />
-              <span>{getToolbarLabel()}</span>
+              <MapPin size={16} color="#2563eb" />
+              <span>
+                {statusInfo.status === 'LIVE' 
+                  ? 'Real-Time Driver Device GPS Location' 
+                  : statusInfo.status === 'COMPLETED' 
+                  ? 'Trip Concluded — Final Vehicle Position' 
+                  : 'Bus Parked at Starting Platform / Depot'}
+              </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {focusNotice && (
-                <span style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600 }}>{focusNotice}</span>
-              )}
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleFocusBus}
-                icon={Navigation}
-              >
-                View / Focus Bus
-              </Button>
-            </div>
+            {focusNotice && (
+              <span className="map-focus-notice">{focusNotice}</span>
+            )}
           </div>
 
           <div className="map-frame">
@@ -174,14 +209,47 @@ export default function ParentDashboard() {
           </div>
         </div>
 
-        {/* Secondary Actions Bar */}
+        {/* 4. ROUTE STOPS PROGRESSION */}
+        <div className="route-schedule-card">
+          <div className="route-card-header">
+            <div>
+              <h3>Route Stops & Scheduled Timings</h3>
+              <p className="subtext">{activeRoute.name}</p>
+            </div>
+            <span className="route-badge-outline">{activeRoute.code}</span>
+          </div>
+
+          <div className="stops-timeline">
+            {activeRoute.stops.map((stop, idx) => {
+              const isStudentStop = stop.name.toLowerCase().includes((currentUser?.stopName || 'mayuri').toLowerCase());
+              return (
+                <div key={idx} className={`timeline-stop-item ${isStudentStop ? 'student-pickup' : ''}`}>
+                  <div className="stop-dot-indicator">
+                    {isStudentStop ? <UserCheck size={14} color="#fff" /> : <span>{idx + 1}</span>}
+                  </div>
+                  <div className="stop-content">
+                    <div className="stop-name-row">
+                      <strong className="stop-name">{stop.name}</strong>
+                      {isStudentStop && <span className="your-stop-badge">Your Child's Pickup Stop</span>}
+                    </div>
+                    <span className="stop-time">
+                      <Clock size={12} /> Scheduled: {stop.scheduledTime}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 5. DRIVER DISPATCH & BROADCASTS */}
         <div className="parent-actions-bar">
           <Button
             variant="outline"
             onClick={() => setShowCommPanel(!showCommPanel)}
             icon={MessageSquare}
           >
-            Contact Driver
+            {showCommPanel ? 'Hide Driver Announcements' : 'View Driver Announcements & Notices'}
           </Button>
 
           <Button
@@ -189,11 +257,11 @@ export default function ParentDashboard() {
             onClick={() => setShowReportModal(true)}
             icon={AlertCircle}
           >
-            Report Issue
+            Report Issue to Transport Desk
           </Button>
         </div>
 
-        {/* Driver Communication Panel (Drawer) */}
+        {/* Communication Drawer */}
         {showCommPanel && (
           <div className="comm-panel-container">
             <CommunicationPanel
@@ -203,8 +271,6 @@ export default function ParentDashboard() {
             />
           </div>
         )}
-
-
 
         {/* Report Issue Modal */}
         {showReportModal && (
@@ -219,8 +285,9 @@ export default function ParentDashboard() {
 
               {reportSubmitted ? (
                 <div className="report-success-box">
-                  <CheckCircle2 size={32} color="#15803d" />
-                  <p>Your report has been submitted to transport administration.</p>
+                  <CheckCircle2 size={36} color="#16a34a" />
+                  <h4>Incident Logged Successfully</h4>
+                  <p>Your report has been forwarded to the Institution Transport Management Control Room.</p>
                 </div>
               ) : (
                 <form onSubmit={handleReportSubmit} className="report-form">
@@ -230,36 +297,36 @@ export default function ParentDashboard() {
                       value={reportType}
                       onChange={(e) => setReportType(e.target.value)}
                     >
-                      <option value="Bus hasn't moved">Bus hasn't moved</option>
-                      <option value="Bus is delayed">Bus is delayed</option>
-                      <option value="Incorrect location">Incorrect location</option>
+                      <option value="Bus hasn't moved / Delay">Bus hasn't moved / Heavy delay</option>
+                      <option value="Missed stop / Route discrepancy">Missed stop / Route discrepancy</option>
                       <option value="Driver communication issue">Driver communication issue</option>
-                      <option value="Emergency">Emergency</option>
-                      <option value="Other">Other</option>
+                      <option value="Vehicle breakdown reported">Vehicle breakdown / Tyre issue</option>
+                      <option value="Emergency Safety Notice">Emergency safety concern</option>
+                      <option value="Other Issue">Other transport feedback</option>
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label>Description / Notes</label>
+                    <label>Details & Specific Location</label>
                     <textarea
                       rows={3}
-                      placeholder="Describe what you observed..."
+                      required
+                      placeholder="Provide specific observations or queries for the transport officer..."
                       value={reportDesc}
                       onChange={(e) => setReportDesc(e.target.value)}
                     />
                   </div>
 
                   <Button type="submit" variant="primary" fullWidth>
-                    Submit Issue Report
+                    Submit Issue to Transport Desk
                   </Button>
                 </form>
               )}
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
 }
-
-

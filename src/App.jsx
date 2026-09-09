@@ -5,9 +5,12 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
 import DriverLogin from './pages/DriverLogin';
-import ParentLogin from './pages/ParentLogin';
+import DriverOnboarding from './pages/DriverOnboarding';
 import DriverDashboard from './pages/DriverDashboard';
+import ParentLogin from './pages/ParentLogin';
 import ParentDashboard from './pages/ParentDashboard';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
 import './App.css';
 
 function ProtectedRoute({ children, allowedRole, currentUser, loading }) {
@@ -19,10 +22,14 @@ function ProtectedRoute({ children, allowedRole, currentUser, loading }) {
     );
   }
   if (!currentUser) {
-    return <Navigate to={allowedRole === 'driver' ? '/driver/login' : '/parent/login'} replace />;
+    if (allowedRole === 'driver') return <Navigate to="/driver/login" replace />;
+    if (allowedRole === 'admin') return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/parent/login" replace />;
   }
   if (allowedRole && currentUser.role !== allowedRole) {
-    return <Navigate to={currentUser.role === 'driver' ? '/driver/dashboard' : '/parent/dashboard'} replace />;
+    if (currentUser.role === 'driver') return <Navigate to="/driver/dashboard" replace />;
+    if (currentUser.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to="/parent/dashboard" replace />;
   }
   return children;
 }
@@ -35,6 +42,8 @@ function AppContent() {
     quickDemoLogin(role);
     if (role === 'driver') {
       navigate('/driver/dashboard');
+    } else if (role === 'admin') {
+      navigate('/admin/dashboard');
     } else {
       navigate('/parent/dashboard');
     }
@@ -54,13 +63,15 @@ function AppContent() {
             path="/"
             element={<LandingPage onQuickLogin={handleQuickLogin} />}
           />
+          
+          {/* DRIVER PORTAL */}
           <Route
             path="/driver/login"
             element={<DriverLogin />}
           />
           <Route
-            path="/parent/login"
-            element={<ParentLogin />}
+            path="/driver/onboarding"
+            element={<DriverOnboarding />}
           />
           <Route
             path="/driver/dashboard"
@@ -70,6 +81,12 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
+          {/* PARENT PORTAL */}
+          <Route
+            path="/parent/login"
+            element={<ParentLogin />}
+          />
           <Route
             path="/parent/dashboard"
             element={
@@ -78,6 +95,21 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
+          {/* ADMIN PORTAL */}
+          <Route
+            path="/admin/login"
+            element={<AdminLogin />}
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allowedRole="admin" currentUser={currentUser} loading={loading}>
+                <AdminDashboard currentUser={currentUser} />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="*"
             element={<Navigate to="/" replace />}
@@ -98,5 +130,3 @@ export default function App() {
     </Router>
   );
 }
-
-

@@ -1,0 +1,534 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { 
+  Bus, ShieldCheck, MapPin, CheckCircle2, AlertCircle, 
+  Upload, FileText, UserCheck, ArrowRight, ArrowLeft, Building2, Sparkles
+} from 'lucide-react';
+import { resolvePinCode, REGISTERED_INSTITUTIONS } from '../data/regionData';
+import { submitDriverApplication, approveDriverApplication } from '../utils/transportService';
+
+export default function DriverOnboarding() {
+  const { currentUser, updateCurrentUserProfile } = useAuth();
+  const navigate = useNavigate();
+
+  // Wizard Step: 1 = PIN Code Check, 2 = Select Institution, 3 = KYC & Documents, 4 = Verification Status
+  const initialStep = currentUser?.verificationStatus ? 4 : 1;
+  const [step, setStep] = useState(initialStep);
+
+  // Form state
+  const [pincode, setPincode] = useState(currentUser?.pincode || '535002');
+  const [pinResult, setPinResult] = useState(() => resolvePinCode('535002'));
+  const [selectedInstitution, setSelectedInstitution] = useState(currentUser?.institutionId || 'INST-MVGR');
+
+  // KYC Fields
+  const [fullName, setFullName] = useState(currentUser?.fullName || currentUser?.name || 'Rajesh Kumar');
+  const [phone, setPhone] = useState(currentUser?.phone || '+91 98765 43210');
+  const [licenceNumber, setLicenceNumber] = useState(currentUser?.licenceNumber || 'AP-35-20180004921');
+  const [licenceValidity, setLicenceValidity] = useState(currentUser?.licenceValidity || '2029-08-15');
+  const [idDocumentType, setIdDocumentType] = useState(currentUser?.idDocumentType || 'Aadhaar Card');
+  const [idDocumentNumber, setIdDocumentNumber] = useState(currentUser?.idDocumentNumber || '9844 2109 8831');
+  const [idDocValidity, setIdDocValidity] = useState(currentUser?.idDocValidity || 'Permanent');
+  const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '7 years (Commercial Heavy Vehicle)');
+
+  // Document Previews
+  const [photoPreview, setPhotoPreview] = useState(currentUser?.photoUrl || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=200&auto=format&fit=crop&q=80');
+  const [dlPreviewName, setDlPreviewName] = useState('DL_Front_AP35_Verified.pdf');
+  const [idPreviewName, setIdPreviewName] = useState('Aadhaar_KYC_Verified.pdf');
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [hackathonApproved, setHackathonApproved] = useState(currentUser?.verificationStatus === 'APPROVED');
+
+  const handleCheckPincode = (e) => {
+    e.preventDefault();
+    setError('');
+    const res = resolvePinCode(pincode);
+    setPinResult(res);
+    if (!res.success) {
+      setError(res.error);
+    }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setPhotoPreview(reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDocUpload = (type, e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (type === 'DL') setDlPreviewName(file.name);
+      if (type === 'ID') setIdPreviewName(file.name);
+    }
+  };
+
+  const handleSubmitApplication = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const instObj = REGISTERED_INSTITUTIONS.find(i => i.id === selectedInstitution) || REGISTERED_INSTITUTIONS[0];
+      const payload = {
+        uid: currentUser?.uid || 'DRV-' + Date.now(),
+        fullName,
+        phone,
+        email: currentUser?.email || 'driver@nishchit.app',
+        pincode,
+        locality: pinResult?.locality || 'Vizianagaram City',
+        district: pinResult?.district || 'Vizianagaram',
+        institutionId: instObj.id,
+        institutionName: instObj.name,
+        photoUrl: photoPreview,
+        licenceNumber,
+        licenceValidity,
+        licenceDocUrl: dlPreviewName,
+        idDocumentType,
+        idDocumentNumber,
+        idDocValidity,
+        idDocUrl: idPreviewName,
+        experienceYears,
+        verificationStatus: 'PENDING'
+      };
+
+      await submitDriverApplication(payload);
+      await updateCurrentUserProfile(payload);
+      setStep(4);
+    } catch (err) {
+      setError(err?.message || 'Failed to submit driver verification application.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInstantHackathonApproval = async () => {
+    setLoading(true);
+    try {
+      const driverId = currentUser?.uid || currentUser?.driverId || 'DRV-901';
+      await approveDriverApplication(driverId, 'BUS-24', 'ROUTE-VZ04');
+      await updateCurrentUserProfile({
+        verificationStatus: 'APPROVED',
+        busId: 'BUS-24',
+        busNumber: 'Bus 24',
+        routeId: 'ROUTE-VZ04',
+        routeName: 'Route 04 (Vizianagaram RTC -> MVGR College)'
+      });
+      setHackathonApproved(true);
+      setTimeout(() => {
+        navigate('/driver/dashboard');
+      }, 1200);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="onboarding-page">
+      <div className="onboarding-container">
+        
+        {/* Wizard Progress Bar */}
+        <div className="wizard-progress">
+          <div className={`step-dot ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
+            <span>1</span>
+            <label>Service Area</label>
+          </div>
+          <div className="step-connector"></div>
+          <div className={`step-dot ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
+            <span>2</span>
+            <label>Institution</label>
+          </div>
+          <div className="step-connector"></div>
+          <div className={`step-dot ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
+            <span>3</span>
+            <label>Driver Profile</label>
+          </div>
+          <div className="step-connector"></div>
+          <div className={`step-dot ${step >= 4 ? 'active' : ''}`}>
+            <span>4</span>
+            <label>Verification</label>
+          </div>
+        </div>
+
+        {error && (
+          <div className="auth-error-banner" style={{ marginBottom: '20px' }}>
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* STEP 1: PIN CODE SERVICE AREA CHECK */}
+        {step === 1 && (
+          <div className="onboarding-card">
+            <div className="card-header">
+              <div className="icon-badge"><MapPin size={22} color="#2563eb" /></div>
+              <div>
+                <h2>Driver Operating Territory Check</h2>
+                <p>Enter your 6-digit postal PIN code to verify service coverage in the Andhra Pradesh corridor.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCheckPincode} className="pincode-form">
+              <div className="form-group">
+                <label>Postal PIN Code (Andhra Pradesh)</label>
+                <div className="pincode-input-row">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    required
+                    placeholder="e.g. 535002, 531162, 530016"
+                    value={pincode}
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <button type="submit" className="btn btn-primary">
+                    Verify Area
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {pinResult && pinResult.success && pinResult.available && (
+              <div className="pincode-result-box active">
+                <div className="result-header">
+                  <CheckCircle2 size={20} color="#16a34a" />
+                  <strong>Service Available in Your Locality!</strong>
+                </div>
+                <div className="result-details">
+                  <p><strong>Locality:</strong> {pinResult.locality}</p>
+                  <p><strong>District:</strong> {pinResult.district}, {pinResult.state}</p>
+                  <p><strong>Corridor:</strong> {pinResult.corridorZone}</p>
+                </div>
+                <div className="action-row">
+                  <button 
+                    type="button" 
+                    onClick={() => setStep(2)}
+                    className="btn btn-primary"
+                  >
+                    Continue to Institution Selection <ArrowRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {pinResult && pinResult.success && !pinResult.available && (
+              <div className="pincode-unavailable-box">
+                <div className="unavailable-icon"><Building2 size={36} color="#d97706" /></div>
+                <h3>We are not currently active in PIN {pincode}</h3>
+                <p>
+                  Nishchit is currently active across the <strong>Vizianagaram – Thagarapuvalasa – Visakhapatnam</strong> educational corridor.
+                </p>
+                <div className="supported-districts-list">
+                  <span>Supported Corridor Hubs:</span>
+                  <ul>
+                    <li>Vizianagaram (535001 - 535280, Chintalavalasa, Cantonment)</li>
+                    <li>Thagarapuvalasa / Bheemili / Anandapuram (531162, 531163)</li>
+                    <li>Visakhapatnam (530001 - 530052, Madhurawada, Rushikonda, MVP)</li>
+                  </ul>
+                </div>
+                <div className="action-row">
+                  <button 
+                    type="button" 
+                    onClick={() => setPincode('535002')}
+                    className="btn btn-outline"
+                  >
+                    Try Corridor PIN (e.g. 535002 - Vizianagaram)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 2: SELECT CAMPUS / INSTITUTION */}
+        {step === 2 && (
+          <div className="onboarding-card">
+            <div className="card-header">
+              <div className="icon-badge"><Building2 size={22} color="#2563eb" /></div>
+              <div>
+                <h2>Select Your School / College / Campus</h2>
+                <p>Choose the registered educational institution in the corridor you are driving for.</p>
+              </div>
+            </div>
+
+            <div className="institution-select-grid">
+              {REGISTERED_INSTITUTIONS.map((inst) => (
+                <div 
+                  key={inst.id}
+                  className={`institution-card-choice ${selectedInstitution === inst.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedInstitution(inst.id)}
+                >
+                  <div className="inst-radio">
+                    <input 
+                      type="radio" 
+                      name="institution" 
+                      checked={selectedInstitution === inst.id} 
+                      onChange={() => setSelectedInstitution(inst.id)} 
+                    />
+                  </div>
+                  <div className="inst-info">
+                    <h4>{inst.name}</h4>
+                    <p className="inst-campus">{inst.campus}</p>
+                    <div className="inst-meta">
+                      <span className="badge-chip">{inst.district}</span>
+                      <span className="badge-chip-fleet">{inst.busesCount} Authorized Buses</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="wizard-btn-row">
+              <button type="button" onClick={() => setStep(1)} className="btn btn-outline">
+                <ArrowLeft size={16} /> Back
+              </button>
+              <button type="button" onClick={() => setStep(3)} className="btn btn-primary">
+                Proceed to Driver KYC & Documents <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: OFFICIAL DRIVER PROFILE & KYC */}
+        {step === 3 && (
+          <div className="onboarding-card">
+            <div className="card-header">
+              <div className="icon-badge"><ShieldCheck size={22} color="#2563eb" /></div>
+              <div>
+                <h2>Driver Profile & Government Documents</h2>
+                <p>Submit official credentials for institution transport desk verification.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitApplication} className="kyc-form">
+              
+              {/* Photo Upload Section */}
+              <div className="passport-photo-section">
+                <div className="photo-preview-box">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Driver Passport Photo" className="passport-img" />
+                  ) : (
+                    <div className="photo-placeholder">
+                      <UserCheck size={32} color="#94a3b8" />
+                      <span>Passport Photo</span>
+                    </div>
+                  )}
+                </div>
+                <div className="photo-upload-controls">
+                  <label className="btn btn-sm btn-outline">
+                    <Upload size={14} /> Upload Passport-Size Photo
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+                  </label>
+                  <span className="helper-text">Official passport-size portrait (White / plain background).</span>
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label>Full Legal Name (as on Driving Licence)</label>
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Registered Mobile Number</label>
+                  <input
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Driving Licence Box */}
+              <div className="document-box">
+                <div className="doc-box-header">
+                  <FileText size={18} color="#2563eb" />
+                  <strong>Driving Licence (Commercial / Transport)</strong>
+                </div>
+
+                <div className="form-grid-2">
+                  <div className="form-group">
+                    <label>Driving Licence (DL) Number</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AP-35-20180004921"
+                      value={licenceNumber}
+                      onChange={(e) => setLicenceNumber(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Licence Validity / Expiry Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={licenceValidity}
+                      onChange={(e) => setLicenceValidity(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="doc-upload-row">
+                  <label className="btn btn-sm btn-outline">
+                    <Upload size={14} /> Upload DL Document
+                    <input type="file" onChange={(e) => handleDocUpload('DL', e)} style={{ display: 'none' }} />
+                  </label>
+                  <span className="file-name-preview">{dlPreviewName}</span>
+                </div>
+              </div>
+
+              {/* Aadhaar / Passport Document Box */}
+              <div className="document-box">
+                <div className="doc-box-header">
+                  <ShieldCheck size={18} color="#059669" />
+                  <strong>National Identity Document (Showcase Verification)</strong>
+                </div>
+
+                <div className="form-grid-2">
+                  <div className="form-group">
+                    <label>Identity Proof Type</label>
+                    <select value={idDocumentType} onChange={(e) => setIdDocumentType(e.target.value)}>
+                      <option value="Aadhaar Card">Aadhaar Card (UIDAI)</option>
+                      <option value="Passport">Indian Passport</option>
+                      <option value="Voter ID">Voter ID Card</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>{idDocumentType} Number</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={idDocumentType === 'Aadhaar Card' ? 'XXXX XXXX XXXX' : 'Document Number'}
+                      value={idDocumentNumber}
+                      onChange={(e) => setIdDocumentNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="doc-upload-row">
+                  <label className="btn btn-sm btn-outline">
+                    <Upload size={14} /> Upload {idDocumentType} Document
+                    <input type="file" onChange={(e) => handleDocUpload('ID', e)} style={{ display: 'none' }} />
+                  </label>
+                  <span className="file-name-preview">{idPreviewName}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Commercial Heavy Vehicle Driving Experience</label>
+                <input
+                  type="text"
+                  required
+                  value={experienceYears}
+                  onChange={(e) => setExperienceYears(e.target.value)}
+                />
+              </div>
+
+              <div className="wizard-btn-row">
+                <button type="button" onClick={() => setStep(2)} className="btn btn-outline">
+                  <ArrowLeft size={16} /> Back
+                </button>
+                <button type="submit" disabled={loading} className="btn btn-primary">
+                  {loading ? 'Submitting Application...' : 'Submit Verification Application'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* STEP 4: VERIFICATION APPLICATION STATUS */}
+        {step === 4 && (
+          <div className="onboarding-card verification-status-card">
+            <div className="status-hero-icon">
+              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED' ? (
+                <div className="icon-approved"><CheckCircle2 size={56} color="#16a34a" /></div>
+              ) : (
+                <div className="icon-pending"><ShieldCheck size={56} color="#2563eb" /></div>
+              )}
+            </div>
+
+            <h2>
+              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED'
+                ? 'Driver Authorization Approved!'
+                : 'Application Submitted & Pending Approval'}
+            </h2>
+
+            <p className="status-desc">
+              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED'
+                ? 'Your credentials have been verified by the Institution Transport Administration. You are assigned to Bus 24 on Route 04.'
+                : 'Your profile and documents have been submitted to the Institution Transport Management Desk. In production, an administrator verifies the credentials and assigns the authorized vehicle and route.'}
+            </p>
+
+            <div className="submitted-summary-card">
+              <div className="summary-row">
+                <span>Driver Name:</span>
+                <strong>{fullName}</strong>
+              </div>
+              <div className="summary-row">
+                <span>Institution:</span>
+                <strong>{currentUser?.institutionName || 'MVGR College of Engineering'}</strong>
+              </div>
+              <div className="summary-row">
+                <span>Licence No:</span>
+                <code>{licenceNumber} (Valid till {licenceValidity})</code>
+              </div>
+              <div className="summary-row">
+                <span>Assigned Fleet:</span>
+                <strong>{currentUser?.busNumber || (hackathonApproved ? 'Bus 24' : 'Pending Allocation')}</strong>
+              </div>
+              <div className="summary-row">
+                <span>Assigned Route:</span>
+                <strong>{currentUser?.routeName || (hackathonApproved ? 'Route 04 (Vizianagaram RTC -> MVGR)' : 'Pending Allocation')}</strong>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="status-action-box">
+              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED' ? (
+                <button 
+                  type="button" 
+                  onClick={() => navigate('/driver/dashboard')} 
+                  className="btn btn-primary btn-full btn-hero"
+                >
+                  <Bus size={18} /> Enter Driver Operational Cockpit
+                </button>
+              ) : (
+                <div className="hackathon-demo-approval-banner">
+                  <div className="banner-text">
+                    <Sparkles size={18} color="#2563eb" />
+                    <div>
+                      <strong>Hackathon Showcase Fast-Track</strong>
+                      <p>Admins approve drivers in the Admin Portal, or you can instantly approve for this demo session.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={handleInstantHackathonApproval}
+                    className="btn btn-success"
+                  >
+                    {loading ? 'Approving...' : 'Approve Driver for Demo'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}

@@ -106,18 +106,10 @@ export async function updateBusState(busId = 'BUS24', patchObj) {
 
   lastWriteTimeMap[busId] = now;
 
-  // Update Firebase Realtime Database with a 4-second maximum timeout race
-  const firebasePromise = update(ref(database, `buses/${busId}`), newState);
-  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('TIMEOUT'), 4000));
-
-  try {
-    const res = await Promise.race([firebasePromise, timeoutPromise]);
-    if (res === 'TIMEOUT') {
-      console.warn("Firebase update timed out after 4s; relying on local sync fallback.");
-    }
-  } catch (err) {
-    console.warn("Firebase update warning (using local sync fallback):", err);
-  }
+  // Asynchronously sync to Firebase Realtime Database (non-blocking for UI responsiveness)
+  update(ref(database, `buses/${busId}`), newState).catch((err) => {
+    console.warn("Firebase realtime sync write fallback:", err);
+  });
 
   return newState;
 }

@@ -2,11 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth';
-import { ref, get, set } from 'firebase/database';
+import { ref, get, set, update } from 'firebase/database';
 import { auth, database } from '../firebase';
+import { seedTransportDatabase } from '../utils/transportService';
 
 const AuthContext = createContext();
 
@@ -29,8 +32,8 @@ const getFriendlyErrorMessage = (error) => {
   if (code.includes('auth/invalid-email')) {
     return "Please enter a valid email address.";
   }
-  if (code.includes('auth/too-many-requests')) {
-    return "Access temporarily blocked due to repeated failed attempts. Please try again later.";
+  if (code.includes('auth/popup-closed-by-user')) {
+    return "Google Sign-In was cancelled.";
   }
   if (code.includes('auth/network-request-failed')) {
     return "Network error. Please check your internet connection.";
@@ -43,64 +46,59 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const isLoggingOutRef = useRef(false);
 
-  // Seeded Demo Users
+  // Authoritative Seeded Demo Profiles for the Vizag-Vizianagaram Corridor
   const DEMO_DRIVER = {
     uid: 'demo-driver-001',
     name: 'Rajesh Kumar',
+    fullName: 'Rajesh Kumar',
     email: 'driver@nishchit.app',
     phone: '+91 98765 43210',
     role: 'driver',
-    driverId: 'DRV001',
-    busId: 'BUS24',
-    routeId: 'ROUTE04',
-    verificationStatus: 'VERIFIED',
-    institution: "St. Mary's High School",
-    busRegistrationNumber: 'TS 09 UB 2424',
-    licenceNumber: 'DL-1420110012345'
+    driverId: 'DRV-901',
+    busId: 'BUS-24',
+    routeId: 'ROUTE-VZ04',
+    verificationStatus: 'APPROVED',
+    institutionId: 'INST-MVGR',
+    institutionName: 'MVGR College of Engineering (Autonomous), Vizianagaram',
+    busRegistrationNumber: 'AP 35 U 2424',
+    busNumber: 'Bus 24',
+    licenceNumber: 'AP-35-20180004921',
+    licenceValidity: '2029-08-15',
+    idDocumentType: 'Aadhaar Card',
+    idDocumentNumber: '9844 2109 8831',
+    idDocValidity: 'Permanent'
   };
 
   const DEMO_PARENT = {
     uid: 'demo-parent-001',
-    name: 'Demo Parent',
+    name: 'Suresh Varma',
     email: 'parent@nishchit.app',
     phone: '+91 91234 56789',
     role: 'parent',
-    studentName: 'Aarav',
-    studentClass: 'Class 8-A',
-    institution: "St. Mary's High School",
-    busId: 'BUS24',
-    routeId: 'ROUTE04'
+    studentName: 'Aarav Varma',
+    studentRollNo: '22331A0589',
+    studentClass: 'B.Tech CSE - 3rd Year',
+    institutionId: 'INST-MVGR',
+    institutionName: 'MVGR College of Engineering, Vizianagaram',
+    busId: 'BUS-24',
+    routeId: 'ROUTE-VZ04',
+    stopName: 'Mayuri Junction / Balaji Nagar'
   };
 
-  // Seed bus data in database if missing
-  const seedDefaultBus = async () => {
-    try {
-      const busRef = ref(database, 'buses/BUS24');
-      const snapshot = await get(busRef);
-      if (!snapshot.exists()) {
-        await set(busRef, {
-          busNumber: 'Bus 24',
-          routeNumber: 'Route 04',
-          driverId: 'DRV001',
-          driverName: 'Rajesh Kumar',
-          driverPhone: '+91 98765 43210',
-          status: 'NOT_STARTED',
-          latitude: 17.4399,
-          longitude: 78.4983,
-          accuracy: 10,
-          lastUpdated: Date.now(),
-          startedAt: null,
-          endedAt: null,
-          isDemoMode: false
-        });
-      }
-    } catch (err) {
-      console.warn("Seeding default bus skipped or offline:", err);
-    }
+  const DEMO_ADMIN = {
+    uid: 'demo-admin-001',
+    name: 'K. Ramakrishna',
+    email: 'admin@nishchit.app',
+    phone: '+91 891 2548899',
+    role: 'admin',
+    title: 'Chief Transport Officer',
+    organization: 'Nishchit Corridor Transport Authority (Vizianagaram – Thagarapuvalasa – Vizag Desk)'
   };
 
   useEffect(() => {
-    seedDefaultBus();
+    // Seed default institutions and vehicles
+    seedTransportDatabase();
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (isLoggingOutRef.current) {
         localStorage.removeItem('nishchit_demo_user');
@@ -109,9 +107,9 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
+
       if (user) {
         localStorage.removeItem('nishchit_demo_user');
-        // Fetch user profile from database
         try {
           const userRef = ref(database, `users/${user.uid}`);
           const snapshot = await get(userRef);
@@ -119,15 +117,21 @@ export function AuthProvider({ children }) {
             setCurrentUser(snapshot.val());
           } else {
             // Default profile fallback
-            setCurrentUser({
+            const role = user.email?.includes('admin') 
+              ? 'admin' 
+              : (user.email?.includes('driver') ? 'driver' : 'parent');
+
+            const newProfile = {
               uid: user.uid,
               email: user.email,
               name: user.displayName || user.email.split('@')[0],
-              role: user.email.includes('driver') ? 'driver' : 'parent',
-              busId: 'BUS24',
-              routeId: 'ROUTE04',
-              verificationStatus: user.email.includes('driver') ? 'PENDING' : undefined
-            });
+              role,
+              busId: role === 'driver' ? 'BUS-24' : 'BUS-24',
+              routeId: role === 'driver' ? 'ROUTE-VZ04' : 'ROUTE-VZ04',
+              verificationStatus: role === 'driver' ? 'PENDING' : undefined
+            };
+            await set(userRef, newProfile);
+            setCurrentUser(newProfile);
           }
         } catch (err) {
           console.error("Error fetching user profile:", err);
@@ -154,22 +158,30 @@ export function AuthProvider({ children }) {
   const loginWithCredentials = async (email, password, expectedRole) => {
     const formattedEmail = (email || '').trim().toLowerCase();
 
-    // Quick match for demo accounts
+    // Match demo accounts instantly
     if (formattedEmail === 'driver@nishchit.app' || (formattedEmail === 'driver' && password === 'driver123')) {
-      if (expectedRole !== 'driver') {
-        throw new Error("Role mismatch: Driver account cannot access Parent portal.");
+      if (expectedRole && expectedRole !== 'driver') {
+        throw new Error("Role mismatch: Driver account cannot access " + expectedRole.toUpperCase() + " portal.");
       }
       localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_DRIVER));
       setCurrentUser(DEMO_DRIVER);
       return DEMO_DRIVER;
     }
     if (formattedEmail === 'parent@nishchit.app' || (formattedEmail === 'parent' && password === 'parent123')) {
-      if (expectedRole !== 'parent') {
-        throw new Error("Role mismatch: Parent account cannot access Driver portal.");
+      if (expectedRole && expectedRole !== 'parent') {
+        throw new Error("Role mismatch: Parent account cannot access " + expectedRole.toUpperCase() + " portal.");
       }
       localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_PARENT));
       setCurrentUser(DEMO_PARENT);
       return DEMO_PARENT;
+    }
+    if (formattedEmail === 'admin@nishchit.app' || (formattedEmail === 'admin' && password === 'admin123')) {
+      if (expectedRole && expectedRole !== 'admin') {
+        throw new Error("Role mismatch: Admin account cannot access " + expectedRole.toUpperCase() + " portal.");
+      }
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_ADMIN));
+      setCurrentUser(DEMO_ADMIN);
+      return DEMO_ADMIN;
     }
 
     try {
@@ -178,9 +190,9 @@ export function AuthProvider({ children }) {
       const snapshot = await get(userRef);
       let profile = snapshot.exists() ? snapshot.val() : null;
 
-      if (profile && profile.role !== expectedRole) {
+      if (profile && expectedRole && profile.role !== expectedRole) {
         await signOut(auth);
-        throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}.`);
+        throw new Error(`Role mismatch: This account is registered as a ${profile.role.toUpperCase()}. Please use the correct login portal.`);
       }
 
       if (!profile) {
@@ -188,9 +200,9 @@ export function AuthProvider({ children }) {
           uid: res.user.uid,
           email: res.user.email,
           name: res.user.email.split('@')[0],
-          role: expectedRole,
-          busId: 'BUS24',
-          routeId: 'ROUTE04',
+          role: expectedRole || 'parent',
+          busId: expectedRole === 'driver' ? 'BUS-24' : 'BUS-24',
+          routeId: expectedRole === 'driver' ? 'ROUTE-VZ04' : 'ROUTE-VZ04',
           verificationStatus: expectedRole === 'driver' ? 'PENDING' : undefined
         };
         await set(userRef, profile);
@@ -207,7 +219,45 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signupWithCredentials = async (email, password, role, extraData) => {
+  const loginWithGoogle = async (expectedRole) => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const res = await signInWithPopup(auth, provider);
+      const userRef = ref(database, `users/${res.user.uid}`);
+      const snapshot = await get(userRef);
+      let profile = snapshot.exists() ? snapshot.val() : null;
+
+      if (profile && expectedRole && profile.role !== expectedRole) {
+        await signOut(auth);
+        throw new Error(`Role mismatch: This Google account is already registered as a ${profile.role.toUpperCase()}.`);
+      }
+
+      if (!profile) {
+        profile = {
+          uid: res.user.uid,
+          email: res.user.email,
+          name: res.user.displayName || res.user.email.split('@')[0],
+          photoURL: res.user.photoURL || '',
+          role: expectedRole || 'parent',
+          busId: expectedRole === 'driver' ? null : 'BUS-24',
+          routeId: expectedRole === 'driver' ? null : 'ROUTE-VZ04',
+          verificationStatus: expectedRole === 'driver' ? 'PENDING' : undefined
+        };
+        await set(userRef, profile);
+      }
+
+      localStorage.removeItem('nishchit_demo_user');
+      setCurrentUser(profile);
+      return profile;
+    } catch (err) {
+      if (err.message && err.message.startsWith("Role mismatch:")) {
+        throw err;
+      }
+      throw new Error(getFriendlyErrorMessage(err));
+    }
+  };
+
+  const signupWithCredentials = async (email, password, role, extraData = {}) => {
     try {
       const formattedEmail = (email || '').trim().toLowerCase();
       const res = await createUserWithEmailAndPassword(auth, formattedEmail, password);
@@ -215,9 +265,7 @@ export function AuthProvider({ children }) {
         uid: res.user.uid,
         email: res.user.email,
         role,
-        busId: extraData.busId || 'BUS24',
-        routeId: extraData.routeId || 'ROUTE04',
-        name: extraData.name || formattedEmail.split('@')[0],
+        name: extraData.name || extraData.fullName || formattedEmail.split('@')[0],
         verificationStatus: role === 'driver' ? 'PENDING' : undefined,
         ...extraData
       };
@@ -231,14 +279,28 @@ export function AuthProvider({ children }) {
   };
 
   const quickDemoLogin = (role) => {
-    if (role === 'driver') {
-      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_DRIVER));
-      setCurrentUser(DEMO_DRIVER);
-      return DEMO_DRIVER;
+    let demoUser = DEMO_PARENT;
+    if (role === 'driver') demoUser = DEMO_DRIVER;
+    if (role === 'admin') demoUser = DEMO_ADMIN;
+
+    localStorage.setItem('nishchit_demo_user', JSON.stringify(demoUser));
+    setCurrentUser(demoUser);
+    return demoUser;
+  };
+
+  const updateCurrentUserProfile = async (updates) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, ...updates };
+    setCurrentUser(updated);
+
+    if (currentUser.uid.startsWith('demo-')) {
+      localStorage.setItem('nishchit_demo_user', JSON.stringify(updated));
     } else {
-      localStorage.setItem('nishchit_demo_user', JSON.stringify(DEMO_PARENT));
-      setCurrentUser(DEMO_PARENT);
-      return DEMO_PARENT;
+      try {
+        await update(ref(database, `users/${currentUser.uid}`), updates);
+      } catch (e) {
+        console.warn("User profile update error:", e);
+      }
     }
   };
 
@@ -249,15 +311,17 @@ export function AuthProvider({ children }) {
     try {
       await signOut(auth);
     } catch (e) {
-      console.warn("Sign out exception caught:", e);
+      console.warn("Sign out exception:", e);
     }
   };
 
   const value = {
     currentUser,
     loginWithCredentials,
+    loginWithGoogle,
     signupWithCredentials,
     quickDemoLogin,
+    updateCurrentUserProfile,
     logout,
     loading
   };
@@ -268,5 +332,3 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
-
-

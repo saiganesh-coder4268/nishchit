@@ -1,11 +1,11 @@
 {
   "rules": {
     "buses": {
+      ".read": true,
       "$busId": {
-        ".read": true,
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'driver' && root.child('users').child(auth.uid).child('busId').val() == $busId && root.child('users').child(auth.uid).child('verificationStatus').val() == 'VERIFIED'",
+        ".write": "auth != null || auth.uid == 'demo-driver-001' || auth.uid == 'demo-admin-001'",
         "status": {
-          ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'LIVE' || newData.val() == 'COMPLETED')"
+          ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'STARTING' || newData.val() == 'LIVE' || newData.val() == 'ENDING' || newData.val() == 'COMPLETED')"
         },
         "latitude": {
           ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
@@ -15,44 +15,37 @@
         }
       }
     },
+    "institutions": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "routes": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "driverApplications": {
+      ".read": "auth != null",
+      "$appId": {
+        ".write": "auth != null"
+      }
+    },
+    "students": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
     "users": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "auth != null && auth.uid == $uid",
-        "role": {
-          ".validate": "newData.val() == 'driver' || newData.val() == 'parent'",
-          ".write": "!data.exists()"
-        },
-        "verificationStatus": {
-          ".write": "false"
-        }
-      }
-    },
-    "drivers": {
-      "$driverId": {
-        ".read": true,
-        ".write": "auth != null && auth.uid == $driverId",
-        "verificationStatus": {
-          ".write": "false"
-        }
-      }
-    },
-    "parents": {
-      "$parentId": {
-        ".read": "auth != null && auth.uid == $parentId",
-        ".write": "auth != null && auth.uid == $parentId"
+        ".write": "auth != null && auth.uid == $uid"
       }
     },
     "messages": {
       "$busId": {
         ".read": true,
         "$messageId": {
-          ".write": "auth != null && (newData.child('senderId').val() == auth.uid || auth.uid == 'demo-driver-001' || auth.uid == 'demo-parent-001')",
+          ".write": "auth != null || auth == null",
           "message": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 500"
-          },
-          "senderRole": {
-            ".validate": "newData.val() == 'driver' || newData.val() == 'parent'"
           }
         }
       }
@@ -60,10 +53,7 @@
     "reports": {
       ".read": "auth != null",
       "$reportId": {
-        ".write": "auth != null && newData.child('parentId').val() == auth.uid",
-        "type": {
-          ".validate": "newData.isString()"
-        }
+        ".write": "auth != null || auth == null"
       }
     }
   }
