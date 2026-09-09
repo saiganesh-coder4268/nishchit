@@ -262,7 +262,6 @@ export default function AdminDashboard() {
   // Operational Dynamic Statistics from Firebase
   const totalBuses = fleetList.length;
   const activeBuses = fleetList.filter((b) => b.status === 'ON_TRIP' || b.status === 'LIVE').length;
-  const totalDrivers = driverApps.length;
   const verifiedDrivers = driverApps.filter((d) => (d.status || d.verificationStatus) === 'approved').length;
   const pendingVerifications = driverApps.filter((d) => (d.status || d.verificationStatus) === 'pending').length;
   const totalRoutes = routesList.length;

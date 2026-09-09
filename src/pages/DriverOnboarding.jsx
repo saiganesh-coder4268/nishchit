@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Bus, ShieldCheck, MapPin, CheckCircle2, AlertCircle, 
-  Upload, FileText, UserCheck, ArrowRight, ArrowLeft, Building2, Sparkles
+  Upload, FileText, UserCheck, ArrowRight, ArrowLeft, Building2
 } from 'lucide-react';
 import { resolvePinCode, REGISTERED_INSTITUTIONS } from '../data/regionData';
-import { submitDriverApplication, approveDriverApplication } from '../utils/transportService';
+import { submitDriverApplication } from '../utils/transportService';
 
 export default function DriverOnboarding() {
   const { currentUser, updateCurrentUserProfile } = useAuth();
@@ -17,24 +17,24 @@ export default function DriverOnboarding() {
   const [step, setStep] = useState(initialStep);
 
   // Form state
-  const [pincode, setPincode] = useState(currentUser?.pincode || '535002');
-  const [pinResult, setPinResult] = useState(() => resolvePinCode('535002'));
+  const [pincode, setPincode] = useState(currentUser?.pincode || '');
+  const [pinResult, setPinResult] = useState(() => currentUser?.pincode ? resolvePinCode(currentUser.pincode) : null);
   const [selectedInstitution, setSelectedInstitution] = useState(currentUser?.institutionId || 'INST-MVGR');
 
   // KYC Fields
-  const [fullName, setFullName] = useState(currentUser?.fullName || currentUser?.name || 'Rajesh Kumar');
-  const [phone, setPhone] = useState(currentUser?.phone || '+91 98765 43210');
-  const [licenceNumber, setLicenceNumber] = useState(currentUser?.licenceNumber || 'AP-35-20180004921');
-  const [licenceValidity, setLicenceValidity] = useState(currentUser?.licenceValidity || '2029-08-15');
+  const [fullName, setFullName] = useState(currentUser?.fullName || currentUser?.name || '');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
+  const [licenceNumber, setLicenceNumber] = useState(currentUser?.licenceNumber || '');
+  const [licenceValidity, setLicenceValidity] = useState(currentUser?.licenceValidity || '');
   const [idDocumentType, setIdDocumentType] = useState(currentUser?.idDocumentType || 'Aadhaar Card');
-  const [idDocumentNumber, setIdDocumentNumber] = useState(currentUser?.idDocumentNumber || '9844 2109 8831');
+  const [idDocumentNumber, setIdDocumentNumber] = useState(currentUser?.idDocumentNumber || '');
   const [idDocValidity] = useState(currentUser?.idDocValidity || 'Permanent');
-  const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '7 years (Commercial Heavy Vehicle)');
+  const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '');
 
   // Document Previews
-  const [photoPreview, setPhotoPreview] = useState(currentUser?.photoUrl || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=200&auto=format&fit=crop&q=80');
-  const [dlPreviewName, setDlPreviewName] = useState('DL_Front_AP35_Verified.pdf');
-  const [idPreviewName, setIdPreviewName] = useState('Aadhaar_KYC_Verified.pdf');
+  const [photoPreview, setPhotoPreview] = useState(currentUser?.photoUrl || '');
+  const [dlPreviewName, setDlPreviewName] = useState(currentUser?.licenceDocUrl || '');
+  const [idPreviewName, setIdPreviewName] = useState(currentUser?.idDocUrl || '');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

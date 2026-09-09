@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserCheck, AlertCircle, ShieldCheck } from 'lucide-react';
+import { UserCheck, AlertCircle, Sparkles } from 'lucide-react';
 import { REGISTERED_INSTITUTIONS } from '../data/regionData';
+import { formatAuthError } from '../utils/authHelper';
 
 export default function ParentLogin() {
   const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials } = useAuth();
@@ -53,7 +54,7 @@ export default function ParentLogin() {
       navigate('/parent/dashboard');
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Authentication failed. Please check credentials.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function ParentLogin() {
       await loginWithGoogle('parent');
       navigate('/parent/dashboard');
     } catch (err) {
-      setError(err.message || 'Google Sign-In failed.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }

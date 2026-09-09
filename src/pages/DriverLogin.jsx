@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Bus, AlertCircle, Sparkles } from 'lucide-react';
+import { formatAuthError } from '../utils/authHelper';
 
 export default function DriverLogin() {
   const { currentUser, loginWithCredentials, loginWithGoogle, signupWithCredentials } = useAuth();
@@ -10,7 +11,8 @@ export default function DriverLogin() {
   useEffect(() => {
     if (currentUser) {
       if (currentUser.role === 'driver') {
-        if (currentUser.verificationStatus === 'APPROVED' && currentUser.busId) {
+        const isApproved = (currentUser.verificationStatus || '').toLowerCase() === 'approved';
+        if (isApproved && currentUser.busId) {
           navigate('/driver/dashboard', { replace: true });
         } else {
           navigate('/driver/onboarding', { replace: true });
@@ -48,7 +50,8 @@ export default function DriverLogin() {
         navigate('/driver/onboarding');
       } else {
         const user = await loginWithCredentials(email, password, 'driver');
-        if (user?.verificationStatus === 'approved' && user?.busId) {
+        const isApproved = (user?.verificationStatus || '').toLowerCase() === 'approved';
+        if (isApproved && user?.busId) {
           navigate('/driver/dashboard');
         } else {
           navigate('/driver/onboarding');
@@ -56,7 +59,7 @@ export default function DriverLogin() {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Authentication failed. Please check credentials.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -67,13 +70,14 @@ export default function DriverLogin() {
     setLoading(true);
     try {
       const user = await loginWithGoogle('driver');
-      if (user.verificationStatus === 'APPROVED' && user.busId) {
+      const isApproved = (user?.verificationStatus || '').toLowerCase() === 'approved';
+      if (isApproved && user?.busId) {
         navigate('/driver/dashboard');
       } else {
         navigate('/driver/onboarding');
       }
     } catch (err) {
-      setError(err.message || 'Google Sign-In failed.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }

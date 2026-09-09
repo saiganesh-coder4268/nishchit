@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize initial fleet and routes once
+  // Initialize fleet and routes in Firestore if empty
   useEffect(() => {
     ensureInitialCorridorData();
   }, []);
@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // Realtime subscription to the user's Firestore profile
+        // Real-time synchronization with user document in Firestore
         unsubProfile = subscribeUserProfile(firebaseUser.uid, async (profile) => {
           if (profile) {
             setCurrentUser({
@@ -49,19 +49,31 @@ export function AuthProvider({ children }) {
               email: firebaseUser.email || profile.email
             });
           } else {
-            // New user without a profile document: create one in Firestore
-            const initialRole = firebaseUser.email?.includes('admin') ? 'admin' : 'parent';
+            // New user without a profile: provision standard Firestore user profile
+            const emailLower = (firebaseUser.email || '').toLowerCase();
+            const initialRole = emailLower.includes('admin')
+              ? 'admin'
+              : emailLower.includes('driver')
+              ? 'driver'
+              : 'parent';
+
             const newProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
               role: initialRole,
               status: initialRole === 'driver' ? 'pending' : 'active',
               verificationStatus: initialRole === 'driver' ? 'pending' : 'approved',
               createdAt: Date.now(),
               updatedAt: Date.now()
             };
-            await saveUserProfile(firebaseUser.uid, newProfile);
+
+            try {
+              await saveUserProfile(firebaseUser.uid, newProfile);
+            } catch (err) {
+              console.warn('Initial profile sync note:', err);
+            }
             setCurrentUser(newProfile);
           }
           setLoading(false);
@@ -78,15 +90,34 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const loginWithCredentials = async (email, password) => {
+  const loginWithCredentials = async (email, password, expectedRole = 'parent') => {
     const cleanEmail = (email || '').trim();
     const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
-    const profile = await getUserProfile(res.user.uid);
-    if (profile) {
-      setCurrentUser(profile);
-      return profile;
+    let profile = await getUserProfile(res.user.uid);
+    
+    if (!profile) {
+      const emailLower = cleanEmail.toLowerCase();
+      const role = emailLower.includes('admin') ? 'admin' : (emailLower.includes('driver') ? 'driver' : expectedRole);
+      profile = {
+        uid: res.user.uid,
+        email: res.user.email,
+        name: res.user.displayName || res.user.email.split('@')[0],
+        fullName: res.user.displayName || res.user.email.split('@')[0],
+        role,
+        status: role === 'driver' ? 'pending' : 'active',
+        verificationStatus: role === 'driver' ? 'pending' : 'approved',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      try {
+        await saveUserProfile(res.user.uid, profile);
+      } catch (e) {
+        console.warn('Profile save note:', e);
+      }
     }
-    return { uid: res.user.uid, email: res.user.email, role: 'parent' };
+    
+    setCurrentUser(profile);
+    return profile;
   };
 
   const loginWithGoogle = async (preferredRole = 'parent') => {
@@ -99,13 +130,18 @@ export function AuthProvider({ children }) {
         uid: user.uid,
         email: user.email,
         name: user.displayName || user.email.split('@')[0],
+        fullName: user.displayName || user.email.split('@')[0],
         role: preferredRole,
         status: preferredRole === 'driver' ? 'pending' : 'active',
         verificationStatus: preferredRole === 'driver' ? 'pending' : 'approved',
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
-      await saveUserProfile(user.uid, profile);
+      try {
+        await saveUserProfile(user.uid, profile);
+      } catch (e) {
+        console.warn('Profile save note:', e);
+      }
     }
     setCurrentUser(profile);
     return profile;
@@ -126,6 +162,7 @@ export function AuthProvider({ children }) {
       status: role === 'driver' ? 'pending' : 'active',
       verificationStatus: role === 'driver' ? 'pending' : 'approved',
       busId: details.busId || null,
+      busNumber: details.busNumber || null,
       routeId: details.routeId || null,
       childName: details.childName || details.studentName || null,
       studentName: details.studentName || details.childName || null,
@@ -138,7 +175,11 @@ export function AuthProvider({ children }) {
       ...details
     };
 
-    await saveUserProfile(user.uid, profile);
+    try {
+      await saveUserProfile(user.uid, profile);
+    } catch (e) {
+      console.warn('Profile save note:', e);
+    }
     setCurrentUser(profile);
     return profile;
   };
@@ -147,11 +188,19 @@ export function AuthProvider({ children }) {
     if (!currentUser?.uid) return;
     const updated = { ...currentUser, ...updates, updatedAt: Date.now() };
     setCurrentUser(updated);
-    await saveUserProfile(currentUser.uid, updates);
+    try {
+      await saveUserProfile(currentUser.uid, updates);
+    } catch (e) {
+      console.warn('Profile update note:', e);
+    }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Sign out note:', e);
+    }
     setCurrentUser(null);
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CommunicationPanel from '../components/CommunicationPanel';
 import { Button, ConfirmDialog, QuickMessageButton } from '../components/ui';
@@ -15,7 +15,7 @@ import { rtdb } from '../firebase';
 
 import {
   Play, Square, AlertTriangle, MessageSquare, Zap, Clock, ShieldCheck,
-  CheckCircle2, MapPin, Navigation, Radio, Building2, Calendar, Phone, Activity,
+  CheckCircle2, MapPin, Navigation, Radio, Building2, Calendar,
   AlertCircle
 } from 'lucide-react';
 

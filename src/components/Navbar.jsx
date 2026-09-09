@@ -34,7 +34,8 @@ export default function Navbar({ currentUser, onLogout }) {
   const getDashboardPath = () => {
     if (!currentUser) return '/';
     if (currentUser.role === 'driver') {
-      return currentUser.verificationStatus === 'APPROVED' ? '/driver/dashboard' : '/driver/onboarding';
+      const isApproved = (currentUser.verificationStatus || '').toLowerCase() === 'approved';
+      return isApproved ? '/driver/dashboard' : '/driver/onboarding';
     }
     if (currentUser.role === 'parent') return '/parent/dashboard';
     if (currentUser.role === 'admin') return '/admin/dashboard';
