@@ -13,13 +13,18 @@ import {
 } from 'lucide-react';
 
 // Predefined Simulated GPS Demo Route Coordinates (Urban Hyderabad School Route)
+const DEMO_INTERVAL_MS = 3500;
 const DEMO_ROUTE_COORDS = [
   { lat: 17.4399, lng: 78.4983 },
-  { lat: 17.4425, lng: 78.5012 },
+  { lat: 17.4415, lng: 78.5000 },
+  { lat: 17.4435, lng: 78.5022 },
   { lat: 17.4460, lng: 78.5050 },
-  { lat: 17.4495, lng: 78.5090 },
+  { lat: 17.4480, lng: 78.5072 },
+  { lat: 17.4505, lng: 78.5100 },
   { lat: 17.4530, lng: 78.5130 },
-  { lat: 17.4575, lng: 78.5180 }
+  { lat: 17.4555, lng: 78.5158 },
+  { lat: 17.4575, lng: 78.5180 },
+  { lat: 17.4600, lng: 78.5205 }
 ];
 
 export default function DriverDashboard() {
@@ -140,7 +145,7 @@ export default function DriverDashboard() {
     };
 
     pushDemoPoint();
-    demoIntervalRef.current = setInterval(pushDemoPoint, 3500);
+    demoIntervalRef.current = setInterval(pushDemoPoint, DEMO_INTERVAL_MS);
   };
 
   // START BUS handler with deterministic 8s timeout Promise
@@ -268,6 +273,7 @@ export default function DriverDashboard() {
   const handleConfirmEndTrip = async () => {
     if (busData.status !== 'LIVE' || isEnding) return;
     setIsEnding(true);
+    setGpsError(null);
 
     try {
       stopAllTracking();
@@ -281,8 +287,14 @@ export default function DriverDashboard() {
         longitude: busData.longitude || 78.4983
       });
 
-      await sendQuickBroadcast("Trip Completed", `🏁 Trip Completed: Today's ${busData.busNumber || 'Bus 24'} trip has ended safely.`);
+      // Immediately dismiss modal & clean up confirm dialog state
       setShowEndConfirm(false);
+
+      // Background message notification (non-blocking)
+      sendQuickBroadcast("Trip Completed", `🏁 Trip Completed: Today's ${busData.busNumber || 'Bus 24'} trip has ended safely.`);
+    } catch (err) {
+      console.error("Error completing trip:", err);
+      setGpsError(err?.message || "Failed to complete trip. Please try again.");
     } finally {
       setIsEnding(false);
     }
