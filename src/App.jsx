@@ -6,11 +6,12 @@ import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
 import DriverLogin from './pages/DriverLogin';
 import DriverOnboarding from './pages/DriverOnboarding';
-import DriverDashboard from './pages/DriverWorkspace';
+import DriverDashboard from './pages/DriverDashboard';
 import ParentLogin from './pages/ParentLogin';
-import ParentDashboard from './pages/ParentWorkspace';
+import ParentDashboard from './pages/ParentDashboard';
 import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminWorkspace';
+import AdminDashboard from './pages/AdminDashboard';
+
 import './App.css';
 
 function ProtectedRoute({ children, allowedRole, currentUser, loading }) {

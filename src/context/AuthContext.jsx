@@ -1,54 +1,173 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
-import { get, ref, set, update } from 'firebase/database';
-import { auth, database } from '../firebase';
+import {
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import { auth } from '../firebase';
+import {
+  getUserProfile,
+  saveUserProfile,
+  subscribeUserProfile,
+  ensureInitialCorridorData
+} from '../services/transportService';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
-const friendly = error => {
-  const code = error?.code || '';
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'The email address or password is incorrect.';
-  if (code.includes('email-already-in-use')) return 'An account already exists with this email address.';
-  if (code.includes('popup-closed')) return 'Google sign-in was cancelled.';
-  if (code.includes('network')) return 'We could not reach the service. Please check your connection.';
-  return 'We could not complete that request. Please try again.';
-};
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => onAuthStateChanged(auth, async user => {
-    if (!user) { setCurrentUser(null); setLoading(false); return; }
-    try { const snap = await get(ref(database, `users/${user.uid}`)); setCurrentUser(snap.exists() ? snap.val() : null); }
-    finally { setLoading(false); }
-  }), []);
-  const profileFor = async (user, role) => {
-    const snap = await get(ref(database, `users/${user.uid}`));
-    if (!snap.exists()) throw new Error('Your account has not been linked to a Nishchit profile yet. Please contact your transport administrator.');
-    const profile = snap.val();
-    if (role && profile.role !== role) { await signOut(auth); throw new Error(`This account is registered for the ${profile.role} portal.`); }
-    setCurrentUser(profile); return profile;
-  };
-  const loginWithCredentials = async (email, password, role) => {
-    try { return await profileFor((await signInWithEmailAndPassword(auth, email.trim(), password)).user, role); }
-    catch (error) { if (error.message?.includes('registered') || error.message?.includes('linked')) throw error; throw new Error(friendly(error)); }
-  };
-  const loginWithGoogle = async role => {
-    try {
-      const user = (await signInWithPopup(auth, new GoogleAuthProvider())).user;
-      const existing = await get(ref(database, `users/${user.uid}`));
-      if (!existing.exists() && role && role !== 'admin') {
-        const profile = { uid: user.uid, email: user.email, name: user.displayName || '', role, verificationStatus: role === 'driver' ? 'pending' : null };
-        await set(ref(database, `users/${user.uid}`), profile); setCurrentUser(profile); return profile;
+
+  // Initialize initial fleet and routes once
+  useEffect(() => {
+    ensureInitialCorridorData();
+  }, []);
+
+  useEffect(() => {
+    let unsubProfile = () => {};
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      unsubProfile();
+
+      if (!firebaseUser) {
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
-      return await profileFor(user, role);
-    } catch (error) { if (error.message?.includes('registered') || error.message?.includes('linked')) throw error; throw new Error(friendly(error)); }
+
+      try {
+        // Realtime subscription to the user's Firestore profile
+        unsubProfile = subscribeUserProfile(firebaseUser.uid, async (profile) => {
+          if (profile) {
+            setCurrentUser({
+              ...profile,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || profile.email
+            });
+          } else {
+            // New user without a profile document: create one in Firestore
+            const initialRole = firebaseUser.email?.includes('admin') ? 'admin' : 'parent';
+            const newProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              role: initialRole,
+              status: initialRole === 'driver' ? 'pending' : 'active',
+              verificationStatus: initialRole === 'driver' ? 'pending' : 'approved',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+            await saveUserProfile(firebaseUser.uid, newProfile);
+            setCurrentUser(newProfile);
+          }
+          setLoading(false);
+        });
+      } catch (err) {
+        console.error('Error synchronizing user profile:', err);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubProfile();
+    };
+  }, []);
+
+  const loginWithCredentials = async (email, password) => {
+    const cleanEmail = (email || '').trim();
+    const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
+    const profile = await getUserProfile(res.user.uid);
+    if (profile) {
+      setCurrentUser(profile);
+      return profile;
+    }
+    return { uid: res.user.uid, email: res.user.email, role: 'parent' };
   };
-  const signupWithCredentials = async (email, password, role, details = {}) => {
-    try { const user = (await createUserWithEmailAndPassword(auth, email.trim(), password)).user; const profile = { uid: user.uid, email: user.email, role, name: details.name || '', verificationStatus: role === 'driver' ? 'PENDING' : undefined, ...details }; await set(ref(database, `users/${user.uid}`), profile); setCurrentUser(profile); return profile; }
-    catch (error) { throw new Error(friendly(error)); }
+
+  const loginWithGoogle = async (preferredRole = 'parent') => {
+    const provider = new GoogleAuthProvider();
+    const res = await signInWithPopup(auth, provider);
+    const user = res.user;
+    let profile = await getUserProfile(user.uid);
+    if (!profile) {
+      profile = {
+        uid: user.uid,
+        email: user.email,
+        name: user.displayName || user.email.split('@')[0],
+        role: preferredRole,
+        status: preferredRole === 'driver' ? 'pending' : 'active',
+        verificationStatus: preferredRole === 'driver' ? 'pending' : 'approved',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      await saveUserProfile(user.uid, profile);
+    }
+    setCurrentUser(profile);
+    return profile;
   };
-  const updateCurrentUserProfile = async updates => { if (!currentUser) return; await update(ref(database, `users/${currentUser.uid}`), updates); setCurrentUser(prev => ({ ...prev, ...updates })); };
-  const logout = async () => { await signOut(auth); setCurrentUser(null); };
-  return <AuthContext.Provider value={{ currentUser, loading, loginWithCredentials, loginWithGoogle, signupWithCredentials, updateCurrentUserProfile, logout }}>{!loading && children}</AuthContext.Provider>;
+
+  const signupWithCredentials = async (email, password, role = 'parent', details = {}) => {
+    const cleanEmail = (email || '').trim();
+    const res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+    const user = res.user;
+
+    const profile = {
+      uid: user.uid,
+      email: user.email,
+      role,
+      name: details.name || details.fullName || cleanEmail.split('@')[0],
+      fullName: details.fullName || details.name || cleanEmail.split('@')[0],
+      phone: details.phone || '',
+      status: role === 'driver' ? 'pending' : 'active',
+      verificationStatus: role === 'driver' ? 'pending' : 'approved',
+      busId: details.busId || null,
+      routeId: details.routeId || null,
+      childName: details.childName || details.studentName || null,
+      studentName: details.studentName || details.childName || null,
+      studentRollNo: details.studentRollNo || null,
+      institutionId: details.institutionId || 'INST-MVGR',
+      institutionName: details.institutionName || 'MVGR College of Engineering',
+      stopName: details.stopName || 'Mayuri Junction / Balaji Nagar',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...details
+    };
+
+    await saveUserProfile(user.uid, profile);
+    setCurrentUser(profile);
+    return profile;
+  };
+
+  const updateCurrentUserProfile = async (updates) => {
+    if (!currentUser?.uid) return;
+    const updated = { ...currentUser, ...updates, updatedAt: Date.now() };
+    setCurrentUser(updated);
+    await saveUserProfile(currentUser.uid, updates);
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    setCurrentUser(null);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        loading,
+        loginWithCredentials,
+        loginWithGoogle,
+        signupWithCredentials,
+        updateCurrentUserProfile,
+        logout
+      }}
+    >
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }

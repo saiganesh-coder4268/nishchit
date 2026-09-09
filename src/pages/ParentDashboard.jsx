@@ -3,15 +3,21 @@ import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
 import CommunicationPanel from '../components/CommunicationPanel';
 import { Button } from '../components/ui';
-import { subscribeSingleBus, submitIncidentReport } from '../utils/transportService';
+import {
+  subscribeSingleBus,
+  subscribeSingleRoute,
+  subscribeLiveLocation,
+  submitIncidentReport
+} from '../services/transportService';
 import { getParentStatusInfo } from '../utils/busStatus';
 import { INITIAL_ROUTES } from '../data/regionData';
 import { ref, onValue } from 'firebase/database';
-import { database } from '../firebase';
+import { rtdb } from '../firebase';
 import { 
   MessageSquare, AlertCircle, MapPin, CheckCircle2, 
-  X, Navigation, Phone, ShieldCheck, UserCheck, Clock, Building2, Radio
+  X, Navigation, Phone, UserCheck, Clock, Building2, Radio
 } from 'lucide-react';
+
 
 export default function ParentDashboard() {
   const { currentUser } = useAuth();
@@ -19,9 +25,10 @@ export default function ParentDashboard() {
   const routeId = currentUser?.routeId || 'ROUTE-VZ04';
 
   const [busData, setBusData] = useState({
-    busNumber: 'Bus 24',
-    registrationNumber: 'AP 35 U 2424',
-    routeName: 'Route 04 (Vizianagaram RTC Complex -> MVGR Campus)',
+    id: busId,
+    busNumber: currentUser?.busNumber || 'Bus 24',
+    registrationNumber: currentUser?.busRegistrationNumber || 'AP 35 U 2424',
+    routeName: currentUser?.routeName || 'Route 04 (Vizianagaram RTC Complex -> MVGR Campus)',
     routeNumber: 'ROUTE 04',
     status: 'NOT_STARTED',
     latitude: 18.1145,
@@ -35,6 +42,7 @@ export default function ParentDashboard() {
     driverPhone: '+91 98765 43210'
   });
 
+  const [routeData, setRouteData] = useState(null);
   const [showCommPanel, setShowCommPanel] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState("Bus hasn't moved / Delay");
@@ -45,10 +53,7 @@ export default function ParentDashboard() {
   const [focusNotice, setFocusNotice] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
 
-  // Active route details
-  const activeRoute = INITIAL_ROUTES.find(r => r.id === routeId) || INITIAL_ROUTES[0];
-
-  // Refresh relative time
+  // Time ticker (4s) for relative time / freshness calculation
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 4000);
     return () => clearInterval(timer);
@@ -56,30 +61,81 @@ export default function ParentDashboard() {
 
   // Firebase connection state
   useEffect(() => {
-    const connRef = ref(database, '.info/connected');
+    const connRef = ref(rtdb, '.info/connected');
     const unsubscribe = onValue(connRef, (snap) => {
       setIsConnected(snap.val() === true);
     });
     return () => unsubscribe();
   }, []);
 
-  // Realtime subscription to the assigned bus
+  // 1. Subscribe to Firestore Bus document
   useEffect(() => {
-    const unsubscribe = subscribeSingleBus(busId, (val) => {
+    if (!busId) return;
+    const unsubBus = subscribeSingleBus(busId, (val) => {
       if (val) {
-        setBusData(prev => ({ ...prev, ...val }));
+        setBusData((prev) => ({
+          ...prev,
+          ...val,
+          // Preserve live coordinates if already streaming faster from RTDB
+          latitude: prev.isLiveStreaming ? prev.latitude : val.latitude || prev.latitude,
+          longitude: prev.isLiveStreaming ? prev.longitude : val.longitude || prev.longitude,
+          lastUpdated: prev.isLiveStreaming ? prev.lastUpdated : val.lastUpdated || prev.lastUpdated
+        }));
       }
     });
-    return () => unsubscribe();
+    return () => unsubBus();
   }, [busId]);
+
+  // 2. Subscribe to Firestore Route document
+  useEffect(() => {
+    if (!routeId) return;
+    const unsubRoute = subscribeSingleRoute(routeId, (val) => {
+      if (val) {
+        setRouteData(val);
+      }
+    });
+    return () => unsubRoute();
+  }, [routeId]);
+
+  // 3. Subscribe to Realtime Database High-Frequency GPS (~4 seconds)
+  useEffect(() => {
+    const targetId = busData?.activeTripId || busId;
+    if (!targetId) return;
+
+    const unsubGps = subscribeLiveLocation(targetId, (livePos) => {
+      if (livePos && livePos.active) {
+        setBusData((prev) => ({
+          ...prev,
+          status: 'LIVE',
+          latitude: Number(livePos.latitude),
+          longitude: Number(livePos.longitude),
+          accuracy: Number(livePos.accuracy || 8),
+          speed: Number(livePos.speed || 0),
+          heading: Number(livePos.heading || 0),
+          lastUpdated: livePos.timestamp || Date.now(),
+          driverName: livePos.driverName || prev.driverName,
+          driverPhone: livePos.driverPhone || prev.driverPhone,
+          isLiveStreaming: true
+        }));
+      } else if (livePos && livePos.active === false) {
+        setBusData((prev) => ({
+          ...prev,
+          status: 'COMPLETED',
+          isLiveStreaming: false
+        }));
+      }
+    });
+
+    return () => unsubGps();
+  }, [busData?.activeTripId, busId]);
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
     try {
       await submitIncidentReport({
-        parentId: currentUser?.uid || 'demo-parent-001',
-        parentName: currentUser?.name || 'Suresh Varma',
-        studentName: currentUser?.studentName || 'Aarav Varma',
+        parentId: currentUser?.uid || 'parent',
+        parentName: currentUser?.name || 'Parent',
+        studentName: currentUser?.studentName || currentUser?.childName || 'Student',
         busId,
         routeId,
         type: reportType,
@@ -92,7 +148,7 @@ export default function ParentDashboard() {
         setReportDesc('');
       }, 2000);
     } catch (err) {
-      console.error("Report submit error:", err);
+      console.error('Report submit error:', err);
     }
   };
 
@@ -100,14 +156,17 @@ export default function ParentDashboard() {
 
   const handleFocusBus = () => {
     if (statusInfo.status === 'NOT_STARTED') {
-      setFocusNotice("Bus is currently parked at depot/starting terminal.");
+      setFocusNotice('Bus is currently parked at depot/starting terminal.');
       setTimeout(() => setFocusNotice(null), 3000);
     } else {
-      setFocusNotice("Focusing live bus location on Google Maps...");
+      setFocusNotice('Focusing live bus location on Google Maps...');
       setTimeout(() => setFocusNotice(null), 2500);
     }
     setFocusTrigger((prev) => prev + 1);
   };
+
+  const activeStops = routeData?.stops?.length ? routeData.stops : (INITIAL_ROUTES.find((r) => r.id === routeId)?.stops || []);
+  const activeRouteName = routeData?.routeName || routeData?.name || busData?.routeName || 'Vizianagaram Corridor Route';
 
   return (
     <div className="parent-dashboard-page">
@@ -121,12 +180,12 @@ export default function ParentDashboard() {
             </div>
             <div className="student-details">
               <div className="student-name-row">
-                <h2>{currentUser?.studentName || 'Aarav Varma'}</h2>
-                <span className="roll-badge">{currentUser?.studentRollNo || '22331A0589'}</span>
+                <h2>{currentUser?.studentName || currentUser?.childName || 'Student'}</h2>
+                <span className="roll-badge">{currentUser?.studentRollNo || 'Enrolled'}</span>
               </div>
               <p className="inst-subhead">
                 <Building2 size={14} className="icon-inline" />
-                {currentUser?.institutionName || "MVGR College of Engineering (Autonomous), Vizianagaram"}
+                {currentUser?.institutionName || 'MVGR College of Engineering (Autonomous), Vizianagaram'}
               </p>
             </div>
           </div>
@@ -134,22 +193,26 @@ export default function ParentDashboard() {
           <div className="assigned-transport-grid">
             <div className="trans-box">
               <span className="trans-label">Assigned Vehicle</span>
-              <strong>{busData.busNumber || 'Bus 24'}</strong>
-              <code>{busData.registrationNumber || 'AP 35 U 2424'}</code>
+              <strong>{busData?.busNumber || 'Bus 24'}</strong>
+              <code>{busData?.registrationNumber || 'AP 35 U 2424'}</code>
             </div>
 
             <div className="trans-box">
               <span className="trans-label">Assigned Route</span>
-              <strong>{busData.routeNumber || 'Route 04'}</strong>
+              <strong>{routeData?.code || busData?.routeNumber || 'Route 04'}</strong>
               <span className="stop-name-tag">Stop: {currentUser?.stopName || 'Mayuri Junction'}</span>
             </div>
 
             <div className="trans-box">
               <span className="trans-label">Authorized Driver</span>
-              <strong>{busData.driverName || 'Rajesh Kumar'}</strong>
-              <a href={`tel:${busData.driverPhone || '+919876543210'}`} className="driver-phone-link">
-                <Phone size={12} /> {busData.driverPhone || '+91 98765 43210'}
-              </a>
+              <strong>{busData?.driverName || 'Assigned Operator'}</strong>
+              {busData?.driverPhone ? (
+                <a href={`tel:${busData.driverPhone}`} className="driver-phone-link">
+                  <Phone size={12} /> {busData.driverPhone}
+                </a>
+              ) : (
+                <span className="driver-phone-link"><Phone size={12} /> Contact Desk</span>
+              )}
             </div>
           </div>
         </div>
@@ -171,7 +234,7 @@ export default function ParentDashboard() {
             {statusInfo.status === 'LIVE' && (
               <div className="telem-badge">
                 <Radio size={14} color="#16a34a" />
-                <span>Live GPS Feed Active</span>
+                <span>Live GPS Feed Active (~4s)</span>
               </div>
             )}
             <Button
@@ -214,13 +277,13 @@ export default function ParentDashboard() {
           <div className="route-card-header">
             <div>
               <h3>Route Stops & Scheduled Timings</h3>
-              <p className="subtext">{activeRoute.name}</p>
+              <p className="subtext">{activeRouteName}</p>
             </div>
-            <span className="route-badge-outline">{activeRoute.code}</span>
+            <span className="route-badge-outline">{routeData?.code || 'ROUTE'}</span>
           </div>
 
           <div className="stops-timeline">
-            {activeRoute.stops.map((stop, idx) => {
+            {activeStops.map((stop, idx) => {
               const isStudentStop = stop.name.toLowerCase().includes((currentUser?.stopName || 'mayuri').toLowerCase());
               return (
                 <div key={idx} className={`timeline-stop-item ${isStudentStop ? 'student-pickup' : ''}`}>

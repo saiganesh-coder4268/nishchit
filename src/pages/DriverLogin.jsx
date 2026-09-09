@@ -43,12 +43,12 @@ export default function DriverLogin() {
           fullName: name,
           phone,
           role: 'driver',
-          verificationStatus: 'PENDING'
+          verificationStatus: 'pending'
         });
         navigate('/driver/onboarding');
       } else {
         const user = await loginWithCredentials(email, password, 'driver');
-        if (user.verificationStatus === 'APPROVED' && user.busId) {
+        if (user?.verificationStatus === 'approved' && user?.busId) {
           navigate('/driver/dashboard');
         } else {
           navigate('/driver/onboarding');

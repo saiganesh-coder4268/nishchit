@@ -1,29 +1,82 @@
-import { onValue, ref, set, update } from 'firebase/database';
-import { database } from '../firebase';
+/**
+ * Nishchit Core Route Service Compatibility Layer
+ * Routes all subscriptions and actions to authoritative Firebase transportService.
+ */
 
-export const subscribe = (path, callback) => onValue(ref(database, path), snap => callback(snap.exists() ? snap.val() : null), () => callback(null));
-export const subscribeRoute = (routeId, callback) => routeId ? subscribe(`routes/${routeId}`, callback) : () => callback(null);
-export const subscribeTrip = (routeId, callback) => routeId ? subscribe(`trips/${routeId}`, callback) : () => callback(null);
-export const subscribeRoutes = callback => subscribe('routes', value => callback(value ? Object.entries(value).map(([id, route]) => ({ id, ...route })) : []));
-export const subscribeApplications = callback => subscribe('driverApplications', value => callback(value ? Object.entries(value).map(([id, application]) => ({ id, ...application })) : []));
+import {
+  subscribeRoutes,
+  subscribeSingleRoute,
+  subscribeDriverApplications,
+  approveDriverApplication,
+  rejectDriverApplication,
+  startDriverTrip,
+  streamDriverGpsLocation,
+  endDriverTrip,
+  subscribeLiveLocation,
+  subscribeSingleBus
+} from '../services/transportService';
+
+export const subscribe = (path, callback) => {
+  if (path.startsWith('routes/')) {
+    return subscribeSingleRoute(path.replace('routes/', ''), callback);
+  }
+  if (path === 'routes') {
+    return subscribeRoutes(callback);
+  }
+  if (path === 'driverApplications') {
+    return subscribeDriverApplications(callback);
+  }
+  if (path.startsWith('buses/')) {
+    return subscribeSingleBus(path.replace('buses/', ''), callback);
+  }
+  return () => {};
+};
+
+export const subscribeRoute = (routeId, callback) => subscribeSingleRoute(routeId, callback);
+export const subscribeTrip = (routeIdOrBusId, callback) => subscribeLiveLocation(routeIdOrBusId, callback);
+export { subscribeRoutes, subscribeDriverApplications as subscribeApplications };
 
 export async function submitApplication(uid, data) {
-  await set(ref(database, `driverApplications/${uid}`), { ...data, status: 'pending', submittedAt: Date.now() });
-  await update(ref(database, `users/${uid}`), { verificationStatus: 'pending' });
+  const { submitDriverApplication } = await import('../services/transportService');
+  return submitDriverApplication({ uid, ...data });
 }
 
 export async function reviewApplication(uid, status, reviewerUid, rejectionReason = '') {
-  await update(ref(database, `driverApplications/${uid}`), { status, reviewedBy: reviewerUid, reviewedAt: Date.now(), rejectionReason });
-  await update(ref(database, `users/${uid}`), { verificationStatus: status });
+  if (status === 'approved') {
+    return approveDriverApplication(uid, uid, 'BUS-24', 'ROUTE-VZ04', reviewerUid);
+  } else {
+    return rejectDriverApplication(uid, uid, rejectionReason, reviewerUid);
+  }
 }
 
-export async function saveRoute(routeId, route) {
-  await set(ref(database, `routes/${routeId}`), route);
-  if (route.driverUid) await update(ref(database, `users/${route.driverUid}`), { routeId });
+export async function beginTrip(routeId, coords = { latitude: 18.1145, longitude: 83.4021 }) {
+  return startDriverTrip({
+    busId: 'BUS-24',
+    routeId,
+    driverInfo: { uid: 'driver', name: 'Driver', busNumber: 'Bus 24' },
+    initialCoords: coords
+  });
 }
 
-export async function beginTrip(routeId) {
-  await update(ref(database, `trips/${routeId}`), { status: 'started', startedAt: Date.now(), endedAt: null });
+export async function finishTrip(routeId, coords = null) {
+  return endDriverTrip({
+    tripId: `TRIP-BUS-24`,
+    busId: 'BUS-24',
+    driverInfo: { uid: 'driver', name: 'Driver' },
+    finalCoords: coords
+  });
 }
-export async function finishTrip(routeId) { await update(ref(database, `trips/${routeId}`), { status: 'ended', endedAt: Date.now() }); }
-export async function publishLocation(routeId, location) { await update(ref(database, `trips/${routeId}`), { location: { ...location, updatedAt: Date.now() } }); }
+
+export async function publishLocation(routeId, location) {
+  return streamDriverGpsLocation({
+    tripId: `TRIP-BUS-24`,
+    busId: 'BUS-24',
+    coords: {
+      latitude: location.lat || location.latitude,
+      longitude: location.lng || location.longitude,
+      accuracy: location.accuracy || 10,
+      heading: location.heading || 0,
+      speed: location.speed || 0
+    }
+  });
+}

@@ -1,12 +1,9 @@
 {
   "rules": {
-    "buses": {
-      "$busId": {
-        ".read": "auth != null && (data.child('driverId').val() == auth.uid || root.child('users').child(auth.uid).child('busId').val() == $busId || root.child('users').child(auth.uid).child('role').val() == 'admin')",
-        ".write": "auth != null && (data.child('driverId').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
-        "status": {
-          ".validate": "newData.isString() && (newData.val() == 'NOT_STARTED' || newData.val() == 'STARTING' || newData.val() == 'LIVE' || newData.val() == 'ENDING' || newData.val() == 'COMPLETED')"
-        },
+    "liveLocations": {
+      "$tripId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
         "latitude": {
           ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
         },
@@ -15,52 +12,46 @@
         }
       }
     },
-    "institutions": {
-      ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
-    },
-    "routes": {
-      ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
-    },
-    "driverApplications": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
-      "$appId": {
-        ".write": "auth != null && (auth.uid == $appId || root.child('users').child(auth.uid).child('role').val() == 'admin')"
-      }
-    },
-    "students": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
-    },
-    "users": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
-        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+    "busLocations": {
+      "$busId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "latitude": {
+          ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+        },
+        "longitude": {
+          ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        }
       }
     },
     "messages": {
       "$busId": {
-      ".read": "auth != null && (root.child('users').child(auth.uid).child('busId').val() == $busId || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        ".read": "auth != null",
         "$messageId": {
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('busId').val() == $busId || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+          ".write": "auth != null",
           "message": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 500"
           }
         }
       }
     },
-    "reports": {
-      ".read": "auth != null",
-      "$reportId": {
-        ".write": "auth != null"
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
       }
+    },
+    "buses": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "routes": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     },
     "trips": {
       ".read": "auth != null",
-      "$routeId": {
-        ".write": "auth != null && root.child('routes').child($routeId).child('driverUid').val() == auth.uid"
-      }
+      ".write": "auth != null"
     }
   }
 }

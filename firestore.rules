@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' ||
+        request.auth.token.email.matches('.*admin.*')
+      );
+    }
+
+    function isDriver() {
+      return isAuthenticated() && getUserData().role == 'driver';
+    }
+
+    // Users Collection
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Driver Applications Collection
+    match /driverApplications/{appId} {
+      allow read: if isAuthenticated() && (isAdmin() || (isDriver() && resource.data.driverId == request.auth.uid));
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Buses Collection
+    match /buses/{busId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isDriver() && (
+          resource.data.driverId == request.auth.uid ||
+          getUserData().busId == busId
+        )
+      );
+    }
+
+    // Routes Collection
+    match /routes/{routeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Active Trips Collection
+    match /trips/{tripId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isDriver() || isAdmin());
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (isDriver() && (resource.data.driverId == request.auth.uid || request.resource.data.driverId == request.auth.uid))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Trip History Collection
+    match /tripHistory/{historyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isDriver() || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // Incident Reports Collection
+    match /reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

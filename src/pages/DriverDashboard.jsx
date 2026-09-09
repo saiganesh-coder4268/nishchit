@@ -1,36 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CommunicationPanel from '../components/CommunicationPanel';
-import { Button, StatusIndicator, ConfirmDialog, QuickMessageButton } from '../components/ui';
-import { subscribeSingleBus, startDriverTrip, updateDriverGpsLocation, endDriverTrip } from '../utils/transportService';
-import { getDriverTrackingStatus } from '../utils/busStatus';
+import { Button, ConfirmDialog, QuickMessageButton } from '../components/ui';
+import {
+  subscribeSingleBus,
+  subscribeSingleRoute,
+  startDriverTrip,
+  streamDriverGpsLocation,
+  endDriverTrip
+} from '../services/transportService';
 import { ref, onValue, push } from 'firebase/database';
-import { database } from '../firebase';
-import { 
-  Play, Square, AlertTriangle, MessageSquare, Zap, Clock, ShieldCheck, 
-  CheckCircle2, MapPin, Navigation, Radio, Building2, Calendar, Phone, Activity
+import { rtdb } from '../firebase';
+
+import {
+  Play, Square, AlertTriangle, MessageSquare, Zap, Clock, ShieldCheck,
+  CheckCircle2, MapPin, Navigation, Radio, Building2, Calendar, Phone, Activity,
+  AlertCircle
 } from 'lucide-react';
 
 export default function DriverDashboard() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  const busId = currentUser?.busId || 'BUS-24';
-  const [busData, setBusData] = useState({
-    busNumber: currentUser?.busNumber || 'Bus 24',
-    registrationNumber: currentUser?.busRegistrationNumber || 'AP 35 U 2424',
-    routeName: currentUser?.routeName || 'Route 04 (Vizianagaram RTC Complex -> MVGR College)',
-    routeNumber: 'ROUTE 04',
-    status: 'NOT_STARTED',
-    latitude: 18.1145,
-    longitude: 83.4021,
-    accuracy: 8,
-    speed: 0,
-    startedAt: null,
-    endedAt: null,
-    lastUpdated: null
-  });
+  const busId = currentUser?.busId || currentUser?.assignedBusId;
+  const routeId = currentUser?.routeId || currentUser?.assignedRouteId;
+
+  const [busData, setBusData] = useState(null);
+  const [routeData, setRouteData] = useState(null);
+  const [activeTripId, setActiveTripId] = useState(null);
 
   const [gpsError, setGpsError] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
@@ -43,12 +41,14 @@ export default function DriverDashboard() {
   const [quickNotice, setQuickNotice] = useState(null);
 
   const watchIdRef = useRef(null);
+  const lastStreamTime = useRef(0);
 
-  const driverVerification = currentUser?.verificationStatus || 'APPROVED';
-  const isVerified = driverVerification === 'APPROVED';
-  const hasAssignedBus = Boolean(currentUser?.busId);
+  const verificationStatus = (currentUser?.verificationStatus || 'pending').toLowerCase();
+  const isApproved = verificationStatus === 'approved';
+  const isRejected = verificationStatus === 'rejected';
+  const isPending = !isApproved && !isRejected;
 
-  // Time ticker
+  // Time ticker for freshness
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 4000);
     return () => clearInterval(timer);
@@ -56,22 +56,37 @@ export default function DriverDashboard() {
 
   // Firebase connection state
   useEffect(() => {
-    const connRef = ref(database, '.info/connected');
+    const connRef = ref(rtdb, '.info/connected');
     const unsubscribe = onValue(connRef, (snap) => {
       setIsConnected(snap.val() === true);
     });
     return () => unsubscribe();
   }, []);
 
-  // Subscribe to Bus State
+  // Subscribe to Assigned Bus
   useEffect(() => {
-    const unsubscribe = subscribeSingleBus(busId, (val) => {
+    if (!busId) return;
+    const unsubBus = subscribeSingleBus(busId, (val) => {
       if (val) {
-        setBusData(prev => ({ ...prev, ...val }));
+        setBusData(val);
+        if (val.activeTripId) {
+          setActiveTripId(val.activeTripId);
+        }
       }
     });
-    return () => unsubscribe();
+    return () => unsubBus();
   }, [busId]);
+
+  // Subscribe to Assigned Route
+  useEffect(() => {
+    if (!routeId) return;
+    const unsubRoute = subscribeSingleRoute(routeId, (val) => {
+      if (val) {
+        setRouteData(val);
+      }
+    });
+    return () => unsubRoute();
+  }, [routeId]);
 
   // Stop GPS tracking on unmount
   const stopTracking = () => {
@@ -87,11 +102,12 @@ export default function DriverDashboard() {
 
   // Send quick broadcast to parents
   const sendQuickBroadcast = async (label, text) => {
+    if (!busId) return;
     try {
-      const messagesRef = ref(database, `messages/${busId}`);
+      const messagesRef = ref(rtdb, `messages/${busId}`);
       await push(messagesRef, {
-        senderId: currentUser?.uid || 'DRV-901',
-        senderName: currentUser?.name || currentUser?.fullName || 'Rajesh Kumar',
+        senderId: currentUser?.uid || 'driver',
+        senderName: currentUser?.name || currentUser?.fullName || 'Driver',
         senderRole: 'driver',
         message: text,
         timestamp: Date.now(),
@@ -100,25 +116,26 @@ export default function DriverDashboard() {
       setQuickNotice(`Broadcasted: "${label}"`);
       setTimeout(() => setQuickNotice(null), 3000);
     } catch (e) {
-      console.warn("Quick broadcast failed:", e);
+      console.warn('Quick broadcast failed:', e);
     }
   };
 
   // START BUS TRIP using Real Device Geolocation
   const handleStartBus = async () => {
     if (!currentUser) {
-      setGpsError("Session expired. Please log in again.");
+      setGpsError('Session expired. Please log in again.');
       return;
     }
-    if (!hasAssignedBus) {
-      setGpsError("No vehicle assigned. Please contact your institution transport manager.");
+    if (!busId) {
+      setGpsError('No vehicle assigned. Please contact your transport administrator.');
       return;
     }
-    if (!isVerified) {
-      setGpsError("Your driver profile is pending verification. Only approved drivers can start trips.");
+    if (!isApproved) {
+      setGpsError('Your profile is pending admin approval.');
       return;
     }
-    if (busData.status === 'LIVE' || isStarting) {
+    const isAlreadyLive = busData?.status === 'ON_TRIP' || busData?.status === 'LIVE';
+    if (isAlreadyLive || isStarting) {
       return;
     }
 
@@ -127,24 +144,24 @@ export default function DriverDashboard() {
     stopTracking();
 
     if (!navigator.geolocation) {
-      setGpsError("Browser Geolocation is not supported on this device/browser.");
+      setGpsError('Browser Geolocation is not supported on this device/browser.');
       setIsStarting(false);
       return;
     }
 
     try {
-      // Step 1: Acquire high-accuracy position fix
+      // 1. Acquire high-accuracy position fix
       const initialPosition = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
           (pos) => resolve(pos),
           (err) => {
-            let msg = "Could not obtain GPS position.";
-            if (err.code === 1) msg = "Location permission was denied. Please allow GPS access in your browser.";
-            else if (err.code === 2) msg = "GPS signal unavailable. Please ensure location services are enabled.";
-            else if (err.code === 3) msg = "GPS fix acquisition timed out. Retrying...";
+            let msg = 'Could not obtain GPS position.';
+            if (err.code === 1) msg = 'Location permission was denied. Please enable GPS permissions in your browser.';
+            else if (err.code === 2) msg = 'GPS signal unavailable. Please ensure location services are enabled on your device.';
+            else if (err.code === 3) msg = 'GPS fix acquisition timed out. Please retry.';
             reject(new Error(msg));
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
         );
       });
 
@@ -152,10 +169,23 @@ export default function DriverDashboard() {
       const coords = { latitude, longitude, accuracy, speed, heading };
       setCurrentCoords(coords);
 
-      // Step 2: Start Trip in Realtime DB
-      await startDriverTrip(busId, currentUser, coords);
+      // 2. Start Trip in Firestore & Realtime Database
+      const trip = await startDriverTrip({
+        busId,
+        routeId: routeId || '',
+        driverInfo: {
+          ...currentUser,
+          busNumber: busData?.busNumber || currentUser?.busNumber || 'Bus',
+          busRegistrationNumber: busData?.registrationNumber || currentUser?.busRegistrationNumber || '',
+          routeName: routeData?.routeName || routeData?.name || currentUser?.routeName || ''
+        },
+        initialCoords: coords
+      });
 
-      // Step 3: Start continuous watchPosition loop
+      setActiveTripId(trip.tripId);
+      lastStreamTime.current = Date.now();
+
+      // 3. Start continuous watchPosition loop (~4 seconds throttled)
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           if (pos && pos.coords) {
@@ -167,41 +197,53 @@ export default function DriverDashboard() {
               heading: pos.coords.heading
             };
             setCurrentCoords(updated);
-            updateDriverGpsLocation(busId, updated);
+
+            // Throttle GPS updates to ~3.5-4s
+            const timeSinceLast = Date.now() - lastStreamTime.current;
+            if (timeSinceLast >= 3500) {
+              lastStreamTime.current = Date.now();
+              streamDriverGpsLocation({
+                tripId: trip.tripId,
+                busId,
+                coords: updated
+              });
+            }
           }
         },
         (watchErr) => {
-          console.warn("GPS Watch warning:", watchErr);
+          console.warn('GPS Watch warning:', watchErr);
         },
         { enableHighAccuracy: true, maximumAge: 2000 }
       );
-
     } catch (err) {
-      setGpsError(err.message || "Failed to start GPS tracking. Please verify browser location permissions.");
+      setGpsError(err.message || 'Failed to start GPS tracking. Please verify browser location permissions.');
     } finally {
       setIsStarting(false);
     }
   };
 
-  // Open End Trip Confirm Dialog
   const handleOpenEndConfirm = () => {
-    if (busData.status !== 'LIVE') return;
     setShowEndConfirm(true);
   };
 
-  // Confirmed End Trip
   const handleConfirmEndTrip = async () => {
-    if (busData.status !== 'LIVE' || isEnding) return;
+    if (isEnding) return;
     setIsEnding(true);
     setGpsError(null);
 
     try {
       stopTracking();
-      await endDriverTrip(busId, currentUser);
+      await endDriverTrip({
+        tripId: activeTripId || busData?.activeTripId,
+        busId,
+        driverInfo: currentUser,
+        finalCoords: currentCoords
+      });
       setShowEndConfirm(false);
+      setActiveTripId(null);
     } catch (err) {
-      console.error("Error completing trip:", err);
-      setGpsError(err?.message || "Failed to end trip.");
+      console.error('Error completing trip:', err);
+      setGpsError(err?.message || 'Failed to end trip.');
     } finally {
       setIsEnding(false);
     }
@@ -216,23 +258,93 @@ export default function DriverDashboard() {
     return `${diffMin}m ago`;
   };
 
-  const isLive = busData.status === 'LIVE';
-  const isCompleted = busData.status === 'COMPLETED';
+  const isLive = busData?.status === 'ON_TRIP' || busData?.status === 'LIVE';
+  const isCompleted = busData?.status === 'COMPLETED';
   const isNotStarted = !isLive && !isCompleted;
 
   const quickMessages = [
-    { label: "Traffic Delay", text: "Heavy traffic near Mayuri Junction / NH16. Expect 5-10 min delay." },
-    { label: "Approaching Stop", text: "Bus is approaching the next scheduled stop. Please be ready at pickup point!" },
-    { label: "Temporary Stop", text: "Bus stopped temporarily at railway crossing / safety check." },
-    { label: "Route Clear", text: "Corridor traffic is clear. Moving smoothly on scheduled timing." },
-    { label: "Emergency Notice", text: "Emergency update: Route diversion via Denkada Road. All students safe." }
+    { label: 'Traffic Delay', text: 'Heavy traffic near Mayuri Junction / NH16. Expect 5-10 min delay.' },
+    { label: 'Approaching Stop', text: 'Bus is approaching the next scheduled stop. Please be ready at pickup point!' },
+    { label: 'Temporary Stop', text: 'Bus stopped temporarily at railway crossing / safety check.' },
+    { label: 'Route Clear', text: 'Corridor traffic is clear. Moving smoothly on scheduled timing.' },
+    { label: 'Emergency Notice', text: 'Emergency update: Route diversion via Denkada Road. All students safe.' }
   ];
+
+  // 1. NON-APPROVED STATES
+  if (isPending) {
+    return (
+      <main className="driver-dashboard-page">
+        <div className="driver-operator-container" style={{ maxWidth: '680px', margin: '40px auto' }}>
+          <section className="driver-status-card" style={{ padding: '36px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'inline-flex', padding: '16px', background: '#eff6ff', borderRadius: '50%', marginBottom: '16px' }}>
+              <ShieldCheck size={44} color="#2563eb" />
+            </div>
+            <span className="section-label" style={{ color: '#2563eb', fontWeight: 700, fontSize: '0.85rem' }}>DRIVER APPLICATION</span>
+            <h1 style={{ fontSize: '1.8rem', color: '#0f172a', margin: '10px 0' }}>Verification Under Review</h1>
+            <p style={{ color: '#475569', fontSize: '1rem', lineHeight: '1.6', marginBottom: '24px' }}>
+              Your application has been submitted to transport administration. Once your driving credentials and commercial vehicle license are reviewed and accepted, you will be assigned a corridor vehicle and route to begin live operations.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+              <button onClick={() => navigate('/driver/onboarding')} className="btn btn-outline">
+                View Application Details
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (isRejected) {
+    return (
+      <main className="driver-dashboard-page">
+        <div className="driver-operator-container" style={{ maxWidth: '680px', margin: '40px auto' }}>
+          <section className="driver-status-card" style={{ padding: '36px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #fee2e2', boxShadow: '0 4px 20px rgba(220,38,38,0.05)' }}>
+            <div style={{ display: 'inline-flex', padding: '16px', background: '#fef2f2', borderRadius: '50%', marginBottom: '16px' }}>
+              <AlertCircle size={44} color="#dc2626" />
+            </div>
+            <span className="section-label" style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.85rem' }}>APPLICATION DECLINED</span>
+            <h1 style={{ fontSize: '1.8rem', color: '#0f172a', margin: '10px 0' }}>Verification Declined</h1>
+            <p style={{ color: '#475569', fontSize: '1rem', lineHeight: '1.6', marginBottom: '16px' }}>
+              Transport administration reviewed your submission and declined the application:
+            </p>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px 16px', marginBottom: '24px', color: '#991b1b', fontWeight: 600 }}>
+              "{currentUser?.rejectionReason || 'Documentation validity could not be confirmed.'}"
+            </div>
+            <button onClick={() => navigate('/driver/onboarding')} className="btn btn-primary">
+              Update & Resubmit Documents
+            </button>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  // 2. APPROVED DRIVER BUT NO VEHICLE ASSIGNED
+  if (!busId) {
+    return (
+      <main className="driver-dashboard-page">
+        <div className="driver-operator-container" style={{ maxWidth: '680px', margin: '40px auto' }}>
+          <section className="driver-status-card" style={{ padding: '36px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'inline-flex', padding: '16px', background: '#f0fdf4', borderRadius: '50%', marginBottom: '16px' }}>
+              <CheckCircle2 size={44} color="#16a34a" />
+            </div>
+            <span className="section-label" style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.85rem' }}>ACCOUNT VERIFIED</span>
+            <h1 style={{ fontSize: '1.8rem', color: '#0f172a', margin: '10px 0' }}>Awaiting Vehicle & Route Allocation</h1>
+            <p style={{ color: '#475569', fontSize: '1rem', lineHeight: '1.6', marginBottom: '24px' }}>
+              Hello <strong>{currentUser?.name || currentUser?.fullName}</strong>! Your account has been verified by the Transport Controller. The administration is currently assigning your fleet vehicle and designated corridor route.
+            </p>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="driver-dashboard-page">
       <div className="driver-operator-container">
-        
-        {/* 1. OPERATOR HEADER: Vehicle & Authorization Banner */}
+
+        {/* 1. OPERATOR HEADER */}
         <div className="driver-auth-bar">
           <div className="auth-status-chip">
             <ShieldCheck size={16} />
@@ -240,11 +352,11 @@ export default function DriverDashboard() {
             {!isConnected && <span className="offline-tag">• Offline Sync</span>}
           </div>
           <div className="auth-details">
-            <strong>{currentUser?.name || currentUser?.fullName || 'Rajesh Kumar'}</strong>
+            <strong>{currentUser?.name || currentUser?.fullName || 'Driver'}</strong>
             <span className="dot">•</span>
-            <span>DL: {currentUser?.licenceNumber || 'AP-35-20180004921'}</span>
+            <span>DL: {currentUser?.licenceNumber || 'Verified'}</span>
             <span className="dot">•</span>
-            <span>{currentUser?.institutionName || 'MVGR College of Engineering'}</span>
+            <span>{currentUser?.institutionName || 'Corridor Transport'}</span>
           </div>
         </div>
 
@@ -258,48 +370,45 @@ export default function DriverDashboard() {
 
         {/* 3. OPERATIONAL HERO COCKPIT */}
         <div className="driver-hero-cockpit">
-          
-          {/* Top Identifier */}
+
           <div className="cockpit-header">
             <div className="bus-route-group">
-              <span className="bus-number-hero">{busData.busNumber || 'Bus 24'}</span>
-              <span className="reg-badge-hero">{busData.registrationNumber || 'AP 35 U 2424'}</span>
+              <span className="bus-number-hero">{busData?.busNumber || 'Assigned Bus'}</span>
+              <span className="reg-badge-hero">{busData?.registrationNumber || 'AP 35 XX'}</span>
             </div>
             <div className="route-tag-hero">
               <MapPin size={14} />
-              <span>{busData.routeNumber || 'ROUTE 04'}</span>
+              <span>{routeData?.code || 'ROUTE'}</span>
             </div>
           </div>
 
           <div className="route-description-line">
             <Navigation size={14} color="#2563eb" />
-            <span>{busData.routeName || 'Vizianagaram RTC Complex -> Mayuri -> MVGR Campus'}</span>
+            <span>{routeData?.routeName || routeData?.name || 'Corridor Scheduled Route'}</span>
           </div>
 
-          {/* Schedule Banner */}
           <div className="cockpit-schedule-bar">
             <div className="schedule-item">
               <Calendar size={14} />
-              <span>Reporting: <strong>06:50 AM</strong></span>
+              <span>Reporting: <strong>{routeData?.reportingTime || '06:50 AM'}</strong></span>
             </div>
             <div className="schedule-item">
               <Clock size={14} />
-              <span>Departure: <strong>07:15 AM</strong></span>
+              <span>Departure: <strong>{routeData?.departureTime || '07:15 AM'}</strong></span>
             </div>
             <div className="schedule-item">
               <Building2 size={14} />
-              <span>Campus Arrival: <strong>08:15 AM</strong></span>
+              <span>Campus Arrival: <strong>{routeData?.expectedArrival || '08:15 AM'}</strong></span>
             </div>
           </div>
 
-          {/* Status Display Area */}
           <div className="cockpit-status-section">
             {isNotStarted && (
               <div className="status-box not-started">
                 <div className="status-title-row">
-                  <span className="status-badge-hero not-started">🅿️ TRIP NOT STARTED</span>
+                  <span className="status-badge-hero not-started">🅿️ TRIP READY TO START</span>
                 </div>
-                <p className="status-subtext">Device GPS is standby. Tap START BUS when departing the depot/platform.</p>
+                <p className="status-subtext">Device GPS is in standby. Tap START BUS TRIP when departing the depot/starting point.</p>
               </div>
             )}
 
@@ -310,27 +419,26 @@ export default function DriverDashboard() {
                     <span className="pulse-dot-green"></span> 🟢 LIVE ON ROUTE
                   </span>
                   <span className="gps-signal-badge">
-                    <Radio size={14} color="#16a34a" /> Live GPS Streaming
+                    <Radio size={14} color="#16a34a" /> Live GPS Streaming (~4s)
                   </span>
                 </div>
-                
-                {/* Live Telemetry Display */}
+
                 <div className="live-telemetry-grid">
                   <div className="telem-item">
                     <span className="telem-label">Latitude</span>
-                    <strong>{busData.latitude ? Number(busData.latitude).toFixed(4) : '--'}° N</strong>
+                    <strong>{currentCoords?.latitude ? Number(currentCoords.latitude).toFixed(4) : busData?.latitude ? Number(busData.latitude).toFixed(4) : '--'}° N</strong>
                   </div>
                   <div className="telem-item">
                     <span className="telem-label">Longitude</span>
-                    <strong>{busData.longitude ? Number(busData.longitude).toFixed(4) : '--'}° E</strong>
+                    <strong>{currentCoords?.longitude ? Number(currentCoords.longitude).toFixed(4) : busData?.longitude ? Number(busData.longitude).toFixed(4) : '--'}° E</strong>
                   </div>
                   <div className="telem-item">
-                    <span className="telem-label">GPS Accuracy</span>
-                    <strong>±{busData.accuracy || 8} m</strong>
+                    <span className="telem-label">Accuracy</span>
+                    <strong>±{Math.round(currentCoords?.accuracy || busData?.accuracy || 8)} m</strong>
                   </div>
                   <div className="telem-item">
                     <span className="telem-label">Last Streamed</span>
-                    <strong>{getRelativeTime(busData.lastUpdated)}</strong>
+                    <strong>{getRelativeTime(busData?.lastUpdated || Date.now())}</strong>
                   </div>
                 </div>
               </div>
@@ -346,7 +454,6 @@ export default function DriverDashboard() {
             )}
           </div>
 
-          {/* Primary Action Button (Huge, single focused action) */}
           <div className="hero-action-area">
             {isNotStarted && (
               <Button
@@ -354,7 +461,7 @@ export default function DriverDashboard() {
                 size="huge"
                 loading={isStarting}
                 loadingText="Acquiring Device GPS Fix..."
-                disabled={!isVerified || !hasAssignedBus || isStarting}
+                disabled={isStarting}
                 onClick={handleStartBus}
                 icon={Play}
                 className="btn-hero-action"
@@ -377,7 +484,7 @@ export default function DriverDashboard() {
             )}
 
             {isCompleted && (
-              <div className="completed-summary-banner">
+              <div className="completed-summary-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                 <CheckCircle2 size={24} color="#059669" />
                 <span>Today's trip is complete. Transport desk has been notified.</span>
               </div>
@@ -385,7 +492,7 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* 4. ONE-TAP PARENT STATUS BROADCASTS */}
+        {/* 4. ONE-TAP STATUS BROADCASTS */}
         <div className="driver-quick-updates-card">
           <div className="quick-updates-header">
             <Zap size={18} color="#2563eb" />

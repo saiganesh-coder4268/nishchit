@@ -28,7 +28,7 @@ export default function DriverOnboarding() {
   const [licenceValidity, setLicenceValidity] = useState(currentUser?.licenceValidity || '2029-08-15');
   const [idDocumentType, setIdDocumentType] = useState(currentUser?.idDocumentType || 'Aadhaar Card');
   const [idDocumentNumber, setIdDocumentNumber] = useState(currentUser?.idDocumentNumber || '9844 2109 8831');
-  const [idDocValidity, setIdDocValidity] = useState(currentUser?.idDocValidity || 'Permanent');
+  const [idDocValidity] = useState(currentUser?.idDocValidity || 'Permanent');
   const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '7 years (Commercial Heavy Vehicle)');
 
   // Document Previews
@@ -38,7 +38,7 @@ export default function DriverOnboarding() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hackathonApproved, setHackathonApproved] = useState(currentUser?.verificationStatus === 'APPROVED');
+
 
   const handleCheckPincode = (e) => {
     e.preventDefault();
@@ -93,7 +93,7 @@ export default function DriverOnboarding() {
         idDocValidity,
         idDocUrl: idPreviewName,
         experienceYears,
-        verificationStatus: 'PENDING'
+        verificationStatus: 'pending'
       };
 
       await submitDriverApplication(payload);
@@ -106,28 +106,6 @@ export default function DriverOnboarding() {
     }
   };
 
-  const handleInstantHackathonApproval = async () => {
-    setLoading(true);
-    try {
-      const driverId = currentUser?.uid || currentUser?.driverId || 'DRV-901';
-      await approveDriverApplication(driverId, 'BUS-24', 'ROUTE-VZ04');
-      await updateCurrentUserProfile({
-        verificationStatus: 'APPROVED',
-        busId: 'BUS-24',
-        busNumber: 'Bus 24',
-        routeId: 'ROUTE-VZ04',
-        routeName: 'Route 04 (Vizianagaram RTC -> MVGR College)'
-      });
-      setHackathonApproved(true);
-      setTimeout(() => {
-        navigate('/driver/dashboard');
-      }, 1200);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="onboarding-page">
@@ -453,23 +431,29 @@ export default function DriverOnboarding() {
         {step === 4 && (
           <div className="onboarding-card verification-status-card">
             <div className="status-hero-icon">
-              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED' ? (
+              {currentUser?.verificationStatus === 'approved' ? (
                 <div className="icon-approved"><CheckCircle2 size={56} color="#16a34a" /></div>
+              ) : currentUser?.verificationStatus === 'rejected' ? (
+                <div className="icon-rejected"><AlertCircle size={56} color="#dc2626" /></div>
               ) : (
                 <div className="icon-pending"><ShieldCheck size={56} color="#2563eb" /></div>
               )}
             </div>
 
             <h2>
-              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED'
+              {currentUser?.verificationStatus === 'approved'
                 ? 'Driver Authorization Approved!'
-                : 'Application Submitted & Pending Approval'}
+                : currentUser?.verificationStatus === 'rejected'
+                ? 'Verification Declined'
+                : 'Application Submitted & Under Review'}
             </h2>
 
             <p className="status-desc">
-              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED'
-                ? 'Your credentials have been verified by the Institution Transport Administration. You are assigned to Bus 24 on Route 04.'
-                : 'Your profile and documents have been submitted to the Institution Transport Management Desk. In production, an administrator verifies the credentials and assigns the authorized vehicle and route.'}
+              {currentUser?.verificationStatus === 'approved'
+                ? `Your credentials have been verified by the Transport Administration. Assigned to ${currentUser?.busNumber || currentUser?.busId || 'Fleet Vehicle'} on ${currentUser?.routeName || currentUser?.routeId || 'Route'}.`
+                : currentUser?.verificationStatus === 'rejected'
+                ? (currentUser?.rejectionReason ? `Decline reason: "${currentUser.rejectionReason}". Please contact your transport administrator or resubmit valid documents.` : 'Your application was declined by the transport administration.')
+                : 'Your profile and KYC documents have been submitted to the Institution Transport Management Desk. An administrator will review your application and assign an authorized vehicle and corridor route.'}
             </p>
 
             <div className="submitted-summary-card">
@@ -487,17 +471,17 @@ export default function DriverOnboarding() {
               </div>
               <div className="summary-row">
                 <span>Assigned Fleet:</span>
-                <strong>{currentUser?.busNumber || (hackathonApproved ? 'Bus 24' : 'Pending Allocation')}</strong>
+                <strong>{currentUser?.busNumber || currentUser?.busId || (currentUser?.verificationStatus === 'approved' ? 'Assigned' : 'Pending Review')}</strong>
               </div>
               <div className="summary-row">
                 <span>Assigned Route:</span>
-                <strong>{currentUser?.routeName || (hackathonApproved ? 'Route 04 (Vizianagaram RTC -> MVGR)' : 'Pending Allocation')}</strong>
+                <strong>{currentUser?.routeName || currentUser?.routeId || (currentUser?.verificationStatus === 'approved' ? 'Assigned' : 'Pending Review')}</strong>
               </div>
             </div>
 
             {/* Action Buttons */}
             <div className="status-action-box">
-              {hackathonApproved || currentUser?.verificationStatus === 'APPROVED' ? (
+              {currentUser?.verificationStatus === 'approved' ? (
                 <button 
                   type="button" 
                   onClick={() => navigate('/driver/dashboard')} 
@@ -505,10 +489,18 @@ export default function DriverOnboarding() {
                 >
                   <Bus size={18} /> Enter Driver Operational Cockpit
                 </button>
+              ) : currentUser?.verificationStatus === 'rejected' ? (
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="btn btn-outline btn-full"
+                >
+                  Review & Resubmit Documents
+                </button>
               ) : (
                 <div className="verification-awaiting">
                   <ShieldCheck size={20} />
-                  <div><strong>Verification pending</strong><p>Your transport administrator will review your details and create an assignment when approved.</p></div>
+                  <div><strong>Verification pending</strong><p>Live status: Awaiting review by Transport Controller in Admin Desk.</p></div>
                 </div>
               )}
             </div>

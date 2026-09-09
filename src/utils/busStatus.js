@@ -6,8 +6,8 @@
  */
 
 // Freshness thresholds in milliseconds
-export const FRESHNESS_LIVE_MS = 60 * 1000;        // <= 60s is LIVE
-export const FRESHNESS_STALE_MS = 5 * 60 * 1000;   // > 60s and <= 5 min is STALE
+export const FRESHNESS_LIVE_MS = 30 * 1000;        // <= 30s is LIVE
+export const FRESHNESS_STALE_MS = 90 * 1000;       // 30s to 90s is STALE
 
 /**
  * Validate latitude & longitude numeric bounds.
@@ -34,13 +34,13 @@ export function calculateLocationFreshness(busData, now = Date.now()) {
   const status = busData.status || 'NOT_STARTED';
 
   if (status === 'COMPLETED') return 'COMPLETED';
-  if (status === 'NOT_STARTED') return 'NOT_STARTED';
+  if (status === 'NOT_STARTED' || status === 'AVAILABLE' || status === 'ASSIGNED') return 'NOT_STARTED';
 
-  if (status === 'LIVE') {
+  if (status === 'LIVE' || status === 'ON_TRIP') {
     const hasValidCoords = isValidCoordinate(busData.latitude, busData.longitude);
     if (!hasValidCoords) return 'UNAVAILABLE';
 
-    const lastUpdated = Number(busData.lastUpdated) || 0;
+    const lastUpdated = Number(busData.lastUpdated || busData.timestamp) || 0;
     if (!lastUpdated) return 'UNAVAILABLE';
 
     const diffMs = Math.max(0, now - lastUpdated);

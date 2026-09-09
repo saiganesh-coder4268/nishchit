@@ -1,9 +1,13 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
+import { getFirestore } from 'firebase/firestore';
 
-const required = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_DATABASE_URL'];
-if (required.some(key => !import.meta.env[key])) console.warn('Nishchit configuration is incomplete. Add Firebase values to .env before deploying.');
+const required = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID'];
+if (required.some(key => !import.meta.env[key])) {
+  console.warn('Nishchit configuration is incomplete. Add Firebase values to .env before deploying.');
+}
+
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -13,6 +17,10 @@ const app = initializeApp({
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 });
+
 export const auth = getAuth(app);
-export const database = getDatabase(app);
+export const rtdb = getDatabase(app);
+export const database = rtdb; // backward compatibility
+export const db = getFirestore(app);
 export default app;
+
