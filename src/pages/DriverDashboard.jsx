@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import DriverVerificationCard from '../components/DriverVerificationCard';
 import CommunicationPanel from '../components/CommunicationPanel';
 import { Button, StatusIndicator, ConfirmDialog, QuickMessageButton } from '../components/ui';
 import { subscribeBusState, updateBusState } from '../utils/busSync';
@@ -9,7 +8,7 @@ import { ref, onValue, push } from 'firebase/database';
 import { database } from '../firebase';
 import { 
   Play, Square, AlertTriangle, 
-  ToggleLeft, ToggleRight, MessageSquare, Zap, Clock 
+  ToggleLeft, ToggleRight, MessageSquare, Zap, Clock, ShieldCheck, CheckCircle2 
 } from 'lucide-react';
 
 // Predefined Simulated GPS Demo Route Coordinates (Urban Hyderabad School Route)
@@ -338,9 +337,25 @@ export default function DriverDashboard() {
 
   return (
     <div className="driver-dashboard-page">
-      <div className="dashboard-container">
+      <div className="driver-operator-container">
+        
+        {/* 1. Compact Authorization Bar (Inline Sleek Header) */}
+        <div className="driver-auth-bar">
+          <div className="auth-status-chip">
+            <ShieldCheck size={16} />
+            <span>AUTHORIZED DRIVER</span>
+            {!isConnected && <span style={{ marginLeft: '6px', color: '#b45309' }}>• Offline</span>}
+          </div>
+          <div className="auth-details">
+            <strong>{currentUser?.name || 'Rajesh Kumar'}</strong>
+            <span className="dot">•</span>
+            <span>ID: {currentUser?.driverId || 'DRV001'}</span>
+            <span className="dot">•</span>
+            <span>St. Mary's High School</span>
+          </div>
+        </div>
 
-        {/* GPS Error Alert */}
+        {/* 2. GPS / System Error Banner */}
         {gpsError && (
           <div className="gps-error-banner">
             <AlertTriangle size={18} />
@@ -348,63 +363,63 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        {/* Driver Verification Status */}
-        <DriverVerificationCard driver={currentUser} busInfo={busData} />
-
-        {/* Main Operational Control Panel */}
-        <div className="driver-control-card">
-          <div className="control-header">
-            <div className="bus-route-title">
-              <h2>{busData.busNumber || 'Bus 24'}</h2>
-              <span className="route-badge">{busData.routeNumber || 'Route 04'}</span>
+        {/* 3. Hero Operational Cockpit (The Focal Area) */}
+        <div className="driver-hero-cockpit">
+          <div className="cockpit-header">
+            <div className="bus-route-group">
+              <span className="bus-number-hero">{busData.busNumber || 'BUS 24'}</span>
+              <span className="route-badge-hero">{busData.routeNumber || 'ROUTE 04'}</span>
             </div>
 
-            {/* Mode / Environment Indicator */}
             <button
               type="button"
               onClick={toggleDemoMode}
-              className={`demo-toggle-btn ${isDemoMode ? 'active' : ''}`}
+              className={`mode-pill ${isDemoMode ? 'demo' : 'real'}`}
+              title="Toggle tracking mode"
             >
-              {isDemoMode ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-              <span>{isDemoMode ? 'DEMO ROUTE' : 'REAL GPS'}</span>
+              {isDemoMode ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+              <span>{isDemoMode ? 'DEMO' : 'REAL GPS'}</span>
             </button>
           </div>
 
-          <div className="state-summary-row">
-            {!isConnected && (
-              <span className="network-offline-badge" style={{ fontSize: '0.78rem', color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fef3c7', fontWeight: 600, display: 'inline-block', marginBottom: '8px' }}>
-                Offline Mode (Local Broadcast)
-              </span>
-            )}
+          <div className="cockpit-status-section">
             {isNotStarted && (
-              <StatusIndicator 
-                status={isStarting ? "PENDING" : "NOT_STARTED"} 
-                label={trackingInfo.label}
-                subtext={trackingInfo.subtext}
-              />
+              <div className="status-box not-started">
+                <div className="status-title-row">
+                  <StatusIndicator status={isStarting ? "PENDING" : "NOT_STARTED"} label={trackingInfo.label} />
+                </div>
+                <p className="status-subtext">Location sharing ready. Tap START BUS when departing.</p>
+              </div>
             )}
 
             {isLive && (
-              <div className="state-info">
-                <StatusIndicator status="LIVE" label={trackingInfo.label} />
-                <span className="state-sub">{trackingInfo.subtext}</span>
-                <span className="last-update-text">
+              <div className="status-box live">
+                <div className="status-title-row">
+                  <StatusIndicator status="LIVE" label={trackingInfo.label} />
+                  <span className="location-active-badge">
+                    <span className="pulse-dot-green"></span>
+                    Location Sharing ACTIVE
+                  </span>
+                </div>
+                <p className="status-subtext">
                   <Clock size={14} /> Last update: {getRelativeTime(busData.lastUpdated)}
-                </span>
+                </p>
               </div>
             )}
 
             {isCompleted && (
-              <StatusIndicator 
-                status="COMPLETED" 
-                label="TRIP COMPLETED"
-                subtext="Trip ended safely"
-              />
+              <div className="status-box completed">
+                <div className="status-title-row">
+                  <StatusIndicator status="COMPLETED" label="TRIP COMPLETED" />
+                  <span className="location-inactive-badge">Location Sharing INACTIVE</span>
+                </div>
+                <p className="status-subtext">Today's bus trip has ended safely.</p>
+              </div>
             )}
           </div>
 
-          {/* Primary Action Button (START BUS / END TRIP) */}
-          <div className="primary-action-area">
+          {/* Hero Action Button Area */}
+          <div className="hero-action-area">
             {isNotStarted && (
               <Button
                 variant="success"
@@ -415,6 +430,7 @@ export default function DriverDashboard() {
                 disabledReason={!hasAssignedBus ? "No assigned bus" : !isVerified ? "Driver pending verification" : undefined}
                 onClick={handleStartBus}
                 icon={Play}
+                className="btn-hero-action"
               >
                 START BUS
               </Button>
@@ -427,26 +443,28 @@ export default function DriverDashboard() {
                 loading={isEnding}
                 onClick={handleOpenEndConfirm}
                 icon={Square}
+                className="btn-hero-action"
               >
                 END TRIP
               </Button>
             )}
 
             {isCompleted && (
-              <p className="completed-notice-text" style={{ color: '#047857', fontWeight: 600, fontSize: '0.95rem', margin: '8px 0' }}>
-                Today's bus trip has ended safely. Location sharing is inactive.
-              </p>
+              <div className="completed-summary-banner">
+                <CheckCircle2 size={24} color="#059669" />
+                <span>Today's bus trip has ended safely. Location sharing is inactive.</span>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Quick Communication Actions (Driver Safety First) */}
-        <div className="driver-quick-comm-section">
-          <div className="quick-comm-header">
-            <Zap size={18} className="text-accent" />
+        {/* 4. Quick Parent Communication Announcements */}
+        <div className="driver-quick-updates-card">
+          <div className="quick-updates-header">
+            <Zap size={18} color="#2563eb" />
             <div>
-              <h3>Quick status</h3>
-              <p className="drawer-sub">Send a predefined message to parents.</p>
+              <h3>Quick Parent Updates</h3>
+              <p className="subhead">One-tap operational status broadcasting.</p>
             </div>
           </div>
 
@@ -463,7 +481,7 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* Full Message Log Drawer Toggle */}
+        {/* 5. Collapsible Communication Log */}
         <div className="driver-drawer-toggle">
           <Button
             variant="outline"
@@ -485,7 +503,7 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        {/* End Trip Destructive Confirmation Dialog */}
+        {/* 6. End Trip Confirmation Modal */}
         <ConfirmDialog
           isOpen={showEndConfirm}
           title="End Today's Bus Trip?"
@@ -501,5 +519,6 @@ export default function DriverDashboard() {
     </div>
   );
 }
+
 
 
