@@ -5,6 +5,14 @@ import { Bus, UserCheck, ShieldCheck, LogOut, Navigation } from 'lucide-react';
 export default function Navbar({ currentUser, onLogout }) {
   const navigate = useNavigate();
 
+  const getWorkspaceTitle = () => {
+    if (!currentUser) return 'Corridor Transport';
+    if (currentUser.role === 'driver') return 'Driver Portal';
+    if (currentUser.role === 'admin') return 'Transport Management';
+    if (currentUser.role === 'parent') return 'Parent Portal';
+    return 'Corridor Transport';
+  };
+
   const getRoleBadge = () => {
     if (!currentUser) return null;
     if (currentUser.role === 'driver') {
@@ -17,7 +25,7 @@ export default function Navbar({ currentUser, onLogout }) {
     if (currentUser.role === 'parent') {
       return (
         <span className="navbar-role-pill parent">
-          <UserCheck size={13} /> Parent ({currentUser.studentName || 'Student'})
+          <UserCheck size={13} /> Parent ({currentUser.studentName || currentUser.childName || 'Student'})
         </span>
       );
     }
@@ -33,10 +41,7 @@ export default function Navbar({ currentUser, onLogout }) {
 
   const getDashboardPath = () => {
     if (!currentUser) return '/';
-    if (currentUser.role === 'driver') {
-      const isApproved = (currentUser.verificationStatus || '').toLowerCase() === 'approved';
-      return isApproved ? '/driver/dashboard' : '/driver/onboarding';
-    }
+    if (currentUser.role === 'driver') return '/driver/dashboard';
     if (currentUser.role === 'parent') return '/parent/dashboard';
     if (currentUser.role === 'admin') return '/admin/dashboard';
     return '/';
@@ -46,14 +51,14 @@ export default function Navbar({ currentUser, onLogout }) {
     <header className="navbar">
       <div className="navbar-container">
         
-        {/* Brand Logo */}
-        <Link to="/" className="navbar-brand">
+        {/* Brand Logo: Routes to role dashboard when authenticated, or landing page when logged out */}
+        <Link to={currentUser ? getDashboardPath() : "/"} className="navbar-brand">
           <div className="brand-logo-circle">
             <Bus size={18} color="#ffffff" />
           </div>
           <div className="brand-text">
             <span className="brand-title">NISHCHIT</span>
-            <span className="brand-sub">Corridor Transport</span>
+            <span className="brand-sub">{getWorkspaceTitle()}</span>
           </div>
         </Link>
 
@@ -63,9 +68,22 @@ export default function Navbar({ currentUser, onLogout }) {
             <div className="navbar-user-strip">
               {getRoleBadge()}
               
-              <Link to={getDashboardPath()} className="nav-dashboard-link">
-                Dashboard
-              </Link>
+              {/* Role Specific Quick Navigation */}
+              {currentUser.role === 'driver' && (
+                <Link to="/driver/dashboard" className="nav-dashboard-link">
+                  Today's Trip
+                </Link>
+              )}
+              {currentUser.role === 'parent' && (
+                <Link to="/parent/dashboard" className="nav-dashboard-link">
+                  Track Bus
+                </Link>
+              )}
+              {currentUser.role === 'admin' && (
+                <Link to="/admin/dashboard" className="nav-dashboard-link">
+                  Operations Console
+                </Link>
+              )}
 
               <div className="user-profile-summary">
                 <span className="user-display-name">{currentUser.name || currentUser.fullName || currentUser.email}</span>

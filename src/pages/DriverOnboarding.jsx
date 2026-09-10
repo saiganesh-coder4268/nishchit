@@ -9,11 +9,16 @@ import { resolvePinCode, REGISTERED_INSTITUTIONS } from '../data/regionData';
 import { submitDriverApplication } from '../utils/transportService';
 
 export default function DriverOnboarding() {
-  const { currentUser, updateCurrentUserProfile } = useAuth();
+  const { currentUser, updateCurrentUserProfile, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Wizard Step: 1 = PIN Code Check, 2 = Select Institution, 3 = KYC & Documents, 4 = Verification Status
-  const initialStep = currentUser?.verificationStatus ? 4 : 1;
+  // Wizard Steps:
+  // 1 = Location / PIN Check
+  // 2 = Institution / Campus Selection
+  // 3 = Driver Profile & KYC Documents
+  // 4 = Review Information
+  // 5 = Application Submitted / Verification Status
+  const initialStep = currentUser?.verificationStatus ? 5 : 1;
   const [step, setStep] = useState(initialStep);
 
   // Form state
@@ -29,7 +34,7 @@ export default function DriverOnboarding() {
   const [idDocumentType, setIdDocumentType] = useState(currentUser?.idDocumentType || 'Aadhaar Card');
   const [idDocumentNumber, setIdDocumentNumber] = useState(currentUser?.idDocumentNumber || '');
   const [idDocValidity] = useState(currentUser?.idDocValidity || 'Permanent');
-  const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '');
+  const [experienceYears, setExperienceYears] = useState(currentUser?.experienceYears || '5+ Years');
 
   // Document Previews
   const [photoPreview, setPhotoPreview] = useState(currentUser?.photoUrl || '');
@@ -38,7 +43,6 @@ export default function DriverOnboarding() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
 
   const handleCheckPincode = (e) => {
     e.preventDefault();
@@ -67,8 +71,17 @@ export default function DriverOnboarding() {
     }
   };
 
-  const handleSubmitApplication = async (e) => {
+  const handleGoToReview = (e) => {
     e.preventDefault();
+    setError('');
+    if (!fullName.trim() || !phone.trim() || !licenceNumber.trim() || !licenceValidity.trim() || !idDocumentNumber.trim()) {
+      setError('Please complete all required fields before reviewing.');
+      return;
+    }
+    setStep(4);
+  };
+
+  const handleSubmitApplication = async () => {
     setError('');
     setLoading(true);
 
@@ -76,8 +89,9 @@ export default function DriverOnboarding() {
       const instObj = REGISTERED_INSTITUTIONS.find(i => i.id === selectedInstitution) || REGISTERED_INSTITUTIONS[0];
       const payload = {
         uid: currentUser?.uid || 'DRV-' + Date.now(),
-        fullName,
-        phone,
+        fullName: fullName.trim(),
+        name: fullName.trim(),
+        phone: phone.trim(),
         email: currentUser?.email || 'driver@nishchit.app',
         pincode,
         locality: pinResult?.locality || 'Vizianagaram City',
@@ -85,27 +99,27 @@ export default function DriverOnboarding() {
         institutionId: instObj.id,
         institutionName: instObj.name,
         photoUrl: photoPreview,
-        licenceNumber,
+        licenceNumber: licenceNumber.trim(),
         licenceValidity,
         licenceDocUrl: dlPreviewName,
         idDocumentType,
-        idDocumentNumber,
+        idDocumentNumber: idDocumentNumber.trim(),
         idDocValidity,
         idDocUrl: idPreviewName,
         experienceYears,
-        verificationStatus: 'pending'
+        verificationStatus: 'pending',
+        status: 'pending'
       };
 
       await submitDriverApplication(payload);
       await updateCurrentUserProfile(payload);
-      setStep(4);
+      setStep(5);
     } catch (err) {
       setError(err?.message || 'Failed to submit driver verification application.');
     } finally {
       setLoading(false);
     }
   };
-
 
   return (
     <div className="onboarding-page">
@@ -115,7 +129,7 @@ export default function DriverOnboarding() {
         <div className="wizard-progress">
           <div className={`step-dot ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
             <span>1</span>
-            <label>Service Area</label>
+            <label>Territory</label>
           </div>
           <div className="step-connector"></div>
           <div className={`step-dot ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
@@ -125,12 +139,17 @@ export default function DriverOnboarding() {
           <div className="step-connector"></div>
           <div className={`step-dot ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
             <span>3</span>
-            <label>Driver Profile</label>
+            <label>Credentials</label>
           </div>
           <div className="step-connector"></div>
-          <div className={`step-dot ${step >= 4 ? 'active' : ''}`}>
+          <div className={`step-dot ${step >= 4 ? 'active' : ''} ${step > 4 ? 'completed' : ''}`}>
             <span>4</span>
-            <label>Verification</label>
+            <label>Review</label>
+          </div>
+          <div className="step-connector"></div>
+          <div className={`step-dot ${step >= 5 ? 'active' : ''}`}>
+            <span>5</span>
+            <label>Status</label>
           </div>
         </div>
 
@@ -419,16 +438,85 @@ export default function DriverOnboarding() {
                 <button type="button" onClick={() => setStep(2)} className="btn btn-outline">
                   <ArrowLeft size={16} /> Back
                 </button>
-                <button type="submit" disabled={loading} className="btn btn-primary">
-                  {loading ? 'Submitting Application...' : 'Submit Verification Application'}
+                <button type="button" onClick={handleGoToReview} className="btn btn-primary">
+                  Review Information <ArrowRight size={16} />
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* STEP 4: VERIFICATION APPLICATION STATUS */}
+        {/* STEP 4: REVIEW INFORMATION BEFORE SUBMISSION */}
         {step === 4 && (
+          <div className="onboarding-card">
+            <div className="card-header">
+              <div className="icon-badge"><FileText size={22} color="#2563eb" /></div>
+              <div>
+                <h2>Review Your Application Details</h2>
+                <p>Please ensure all credentials match your official transport documents before submitting.</p>
+              </div>
+            </div>
+
+            <div className="review-summary-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', margin: '20px 0' }}>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'center', padding: '16px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', background: '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Driver" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <UserCheck size={36} color="#94A3B8" />
+                  )}
+                </div>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', color: '#0F172A' }}>{fullName}</h3>
+                  <p style={{ margin: '0 0 4px 0', color: '#64748B', fontSize: '0.9rem' }}>Phone: <strong>{phone}</strong></p>
+                  <p style={{ margin: 0, color: '#64748B', fontSize: '0.9rem' }}>Email: <strong>{currentUser?.email || 'driver@nishchit.app'}</strong></p>
+                </div>
+              </div>
+
+              <div className="submitted-summary-card" style={{ marginTop: 0 }}>
+                <div className="summary-row">
+                  <span>Operating Territory:</span>
+                  <strong>{pinResult?.locality || 'Vizianagaram Corridor'} (PIN {pincode})</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Institution:</span>
+                  <strong>{REGISTERED_INSTITUTIONS.find(i => i.id === selectedInstitution)?.name || 'MVGR College of Engineering'}</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Commercial Licence (DL):</span>
+                  <code>{licenceNumber} (Valid till {licenceValidity})</code>
+                </div>
+                <div className="summary-row">
+                  <span>National Identity:</span>
+                  <strong>{idDocumentType} — {idDocumentNumber.slice(0, 4)} XXXX {idDocumentNumber.slice(-4) || 'XXXX'}</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Heavy Vehicle Experience:</span>
+                  <strong>{experienceYears}</strong>
+                </div>
+              </div>
+
+              <div style={{ padding: '16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', color: '#1E40AF', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, marginBottom: '4px' }}>
+                  <ShieldCheck size={16} /> Official Verification Notice
+                </div>
+                Your application will be submitted to the Institution Transport Desk. Your transport administrator must review and approve your account before you can operate a vehicle.
+              </div>
+            </div>
+
+            <div className="wizard-btn-row">
+              <button type="button" onClick={() => setStep(3)} className="btn btn-outline" disabled={loading}>
+                <ArrowLeft size={16} /> Edit Details
+              </button>
+              <button type="button" onClick={handleSubmitApplication} disabled={loading} className="btn btn-primary">
+                {loading ? 'Submitting Application...' : 'Submit Verification Application'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: VERIFICATION APPLICATION STATUS */}
+        {step === 5 && (
           <div className="onboarding-card verification-status-card">
             <div className="status-hero-icon">
               {currentUser?.verificationStatus === 'approved' ? (
@@ -445,37 +533,42 @@ export default function DriverOnboarding() {
                 ? 'Driver Authorization Approved!'
                 : currentUser?.verificationStatus === 'rejected'
                 ? 'Verification Declined'
-                : 'Application Submitted & Under Review'}
+                : 'Application Submitted for Verification'}
             </h2>
 
-            <p className="status-desc">
+            <p className="status-desc" style={{ fontSize: '1rem', lineHeight: '1.6' }}>
               {currentUser?.verificationStatus === 'approved'
                 ? `Your credentials have been verified by the Transport Administration. Assigned to ${currentUser?.busNumber || currentUser?.busId || 'Fleet Vehicle'} on ${currentUser?.routeName || currentUser?.routeId || 'Route'}.`
                 : currentUser?.verificationStatus === 'rejected'
-                ? (currentUser?.rejectionReason ? `Decline reason: "${currentUser.rejectionReason}". Please contact your transport administrator or resubmit valid documents.` : 'Your application was declined by the transport administration.')
-                : 'Your profile and KYC documents have been submitted to the Institution Transport Management Desk. An administrator will review your application and assign an authorized vehicle and corridor route.'}
+                ? (currentUser?.rejectionReason ? `Decline reason: "${currentUser.rejectionReason}". Please review and update your documents.` : 'Your application was not approved by transport administration.')
+                : 'Your application has been submitted for verification. Your transport administrator must approve your account before you can operate a vehicle.'}
             </p>
 
             <div className="submitted-summary-card">
               <div className="summary-row">
                 <span>Driver Name:</span>
-                <strong>{fullName}</strong>
+                <strong>{fullName || currentUser?.name || 'Driver Applicant'}</strong>
               </div>
               <div className="summary-row">
                 <span>Institution:</span>
-                <strong>{currentUser?.institutionName || 'MVGR College of Engineering'}</strong>
+                <strong>{currentUser?.institutionName || REGISTERED_INSTITUTIONS.find(i => i.id === selectedInstitution)?.name || 'Corridor Institution'}</strong>
               </div>
               <div className="summary-row">
                 <span>Licence No:</span>
-                <code>{licenceNumber} (Valid till {licenceValidity})</code>
+                <code>{licenceNumber || currentUser?.licenceNumber || 'Commercial DL'} {licenceValidity ? `(Valid till ${licenceValidity})` : ''}</code>
+              </div>
+              <div className="summary-row">
+                <span>Verification Status:</span>
+                <strong style={{ 
+                  color: currentUser?.verificationStatus === 'approved' ? '#16A34A' : currentUser?.verificationStatus === 'rejected' ? '#DC2626' : '#2563EB',
+                  textTransform: 'uppercase'
+                }}>
+                  {currentUser?.verificationStatus || 'PENDING VERIFICATION'}
+                </strong>
               </div>
               <div className="summary-row">
                 <span>Assigned Fleet:</span>
-                <strong>{currentUser?.busNumber || currentUser?.busId || (currentUser?.verificationStatus === 'approved' ? 'Assigned' : 'Pending Review')}</strong>
-              </div>
-              <div className="summary-row">
-                <span>Assigned Route:</span>
-                <strong>{currentUser?.routeName || currentUser?.routeId || (currentUser?.verificationStatus === 'approved' ? 'Assigned' : 'Pending Review')}</strong>
+                <strong>{currentUser?.busNumber || currentUser?.busId || (currentUser?.verificationStatus === 'approved' ? 'Assigned' : 'Awaiting Admin Approval')}</strong>
               </div>
             </div>
 
@@ -495,12 +588,29 @@ export default function DriverOnboarding() {
                   onClick={() => setStep(3)}
                   className="btn btn-outline btn-full"
                 >
-                  Review & Resubmit Documents
+                  Review &amp; Resubmit Documents
                 </button>
               ) : (
-                <div className="verification-awaiting">
-                  <ShieldCheck size={20} />
-                  <div><strong>Verification pending</strong><p>Live status: Awaiting review by Transport Controller in Admin Desk.</p></div>
+                <div>
+                  <div className="verification-awaiting" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <ShieldCheck size={24} color="#2563EB" />
+                    <div>
+                      <strong style={{ display: 'block', color: '#0F172A' }}>Application Status: PENDING VERIFICATION</strong>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748B' }}>Awaiting review by the Transport Controller in Admin Desk. Once approved, vehicle and route will be assigned.</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await logout();
+                      navigate('/', { replace: true });
+                    }}
+                    className="btn btn-outline btn-full"
+                    style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  >
+                    Sign Out &amp; Exit Session
+                  </button>
                 </div>
               )}
             </div>
@@ -511,3 +621,4 @@ export default function DriverOnboarding() {
     </div>
   );
 }
+

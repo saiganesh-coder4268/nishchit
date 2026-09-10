@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, AlertCircle, Lock, Sparkles, Building2 } from 'lucide-react';
-import { formatAuthError } from '../utils/authHelper';
+import { ShieldCheck, AlertCircle, Lock } from 'lucide-react';
 
+/**
+ * TEMPORARY HACKATHON ADMIN ACCESS
+ * NOT FOR PRODUCTION
+ * 
+ * Hackathon credentials:
+ * ID: admin123
+ * PASSWORD: admin123
+ * 
+ * Public registration is disabled to enforce role isolation.
+ */
 export default function AdminLogin() {
-  const { currentUser, loginWithCredentials, signupWithCredentials } = useAuth();
+  const { currentUser, loginAsAdminHackathon } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,34 +29,31 @@ export default function AdminLogin() {
     }
   }, [currentUser, navigate]);
 
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+  const [adminId, setAdminId] = useState('');
   const [password, setPassword] = useState('');
-  const [adminName, setAdminName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    const cleanId = (adminId || '').trim();
+    const cleanPass = (password || '').trim();
+
+    if (!cleanId || !cleanPass) {
+      setError('Please enter both administrator ID and password.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        await signupWithCredentials(email, password, 'admin', {
-          name: adminName || 'Transport Administrator',
-          fullName: adminName || 'Transport Administrator',
-          role: 'admin',
-          status: 'active',
-          verificationStatus: 'approved'
-        });
-      } else {
-        await loginWithCredentials(email, password, 'admin');
-      }
+      // TEMPORARY HACKATHON ADMIN ACCESS - NOT FOR PRODUCTION
+      await loginAsAdminHackathon(cleanId, cleanPass);
       navigate('/admin/dashboard');
     } catch (err) {
-      console.error(err);
-      setError(formatAuthError(err));
+      setError(err?.message || 'Incorrect admin ID or password.');
     } finally {
       setLoading(false);
     }
@@ -59,12 +65,12 @@ export default function AdminLogin() {
         
         <div className="portal-badge-banner admin">
           <ShieldCheck size={18} />
-          <span>TRANSPORT CONTROLLER & ADMIN DESK</span>
+          <span>TRANSPORT CONTROLLER &amp; ADMIN DESK</span>
         </div>
 
         <div className="auth-header">
-          <h1>{isSignUp ? 'Register Transport Controller' : 'Transport Authority Sign In'}</h1>
-          <p>Corridor Fleet Control, Driver Approvals & Route Management</p>
+          <h1>Transport Authority Sign In</h1>
+          <p>Corridor Fleet Control, Driver Approvals &amp; Route Scheduling</p>
         </div>
 
         {error && (
@@ -75,27 +81,15 @@ export default function AdminLogin() {
         )}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          {isSignUp && (
-            <div className="form-group">
-              <label>Administrator / Officer Name</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Transport Controller"
-                value={adminName}
-                onChange={(e) => setAdminName(e.target.value)}
-              />
-            </div>
-          )}
-
           <div className="form-group">
-            <label>Admin Work Email</label>
+            <label>Administrator ID</label>
             <input
-              type="email"
+              type="text"
               required
-              placeholder="admin@nishchit.app"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+              placeholder="e.g. admin123"
+              value={adminId}
+              onChange={(e) => setAdminId(e.target.value)}
             />
           </div>
 
@@ -114,32 +108,15 @@ export default function AdminLogin() {
             type="submit"
             disabled={loading}
             className="btn btn-primary btn-full"
+            style={{ height: '46px', fontSize: '1rem', fontWeight: 600 }}
           >
-            {loading ? 'Verifying Credentials...' : isSignUp ? 'Create Admin Profile' : 'Sign In as Transport Administrator'}
+            {loading ? 'Verifying Controller Credentials...' : 'Sign In to Transport Desk'}
           </button>
         </form>
 
-        <div className="auth-toggle-footer">
-          {isSignUp ? (
-            <p>
-              Already an administrator?{' '}
-              <button type="button" onClick={() => setIsSignUp(false)} className="btn-link">
-                Sign In
-              </button>
-            </p>
-          ) : (
-            <p>
-              Setting up new institution admin?{' '}
-              <button type="button" onClick={() => setIsSignUp(true)} className="btn-link">
-                Create Admin Account
-              </button>
-            </p>
-          )}
-        </div>
-
-        <div className="auth-footer-notice">
-          <Lock size={14} />
-          <span>Authorized institution and corridor transport personnel only.</span>
+        <div className="auth-footer-notice" style={{ marginTop: '20px', padding: '12px 16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '0.82rem' }}>
+          <Lock size={14} color="#64748B" />
+          <span>Authorized institution and corridor transport personnel only. Public registration is restricted.</span>
         </div>
 
         <div className="portal-switcher-footer">

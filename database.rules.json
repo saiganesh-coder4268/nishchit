@@ -3,24 +3,30 @@
     "liveLocations": {
       "$tripId": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (!data.exists() ? newData.child('driverId').val() === auth.uid : data.child('driverId').val() === auth.uid || newData.child('driverId').val() === auth.uid)",
         "latitude": {
           ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
         },
         "longitude": {
           ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
         }
       }
     },
     "busLocations": {
       "$busId": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (!data.exists() ? newData.child('driverId').val() === auth.uid : data.child('driverId').val() === auth.uid || newData.child('driverId').val() === auth.uid)",
         "latitude": {
           ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
         },
         "longitude": {
           ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
         }
       }
     },
@@ -28,9 +34,12 @@
       "$busId": {
         ".read": "auth != null",
         "$messageId": {
-          ".write": "auth != null",
+          ".write": "auth != null && newData.child('senderId').val() === auth.uid",
           "message": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 500"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
           }
         }
       }
@@ -38,20 +47,26 @@
     "users": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     "buses": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      "$busId": {
+        ".write": "auth != null && (data.child('driverId').val() === auth.uid || newData.child('driverId').val() === auth.uid)"
+      }
     },
     "routes": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      "$routeId": {
+        ".write": "auth != null && (data.child('driverId').val() === auth.uid || newData.child('driverId').val() === auth.uid)"
+      }
     },
     "trips": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      "$tripId": {
+        ".write": "auth != null && (data.child('driverId').val() === auth.uid || newData.child('driverId').val() === auth.uid)"
+      }
     }
   }
 }

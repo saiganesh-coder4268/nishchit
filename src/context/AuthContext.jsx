@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   GoogleAuthProvider,
-  createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
   signInWithPopup,
   signOut
 } from 'firebase/auth';
@@ -15,11 +13,23 @@ import {
   ensureInitialCorridorData
 } from '../services/transportService';
 
+const ADMIN_SESSION_STORAGE_KEY = 'nishchit_admin_session';
+
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedAdmin = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+      if (savedAdmin) {
+        return JSON.parse(savedAdmin);
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   // Initialize fleet and routes in Firestore if empty
@@ -31,10 +41,25 @@ export function AuthProvider({ children }) {
     let unsubProfile = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      // If hackathon admin is currently active, preserve that session
+      try {
+        const savedAdmin = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+        if (savedAdmin) {
+          const parsed = JSON.parse(savedAdmin);
+          if (parsed && parsed.role === 'admin') {
+            setCurrentUser(parsed);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Ignore
+      }
+
       unsubProfile();
 
       if (!firebaseUser) {
-        setCurrentUser(null);
+        setCurrentUser((prev) => (prev?.role === 'admin' ? prev : null));
         setLoading(false);
         return;
       }
@@ -49,22 +74,20 @@ export function AuthProvider({ children }) {
               email: firebaseUser.email || profile.email
             });
           } else {
-            // New user without a profile: provision standard Firestore user profile
-            const emailLower = (firebaseUser.email || '').toLowerCase();
-            const initialRole = emailLower.includes('admin')
-              ? 'admin'
-              : emailLower.includes('driver')
-              ? 'driver'
-              : 'parent';
+            // Honor the intended role (driver or parent) set during sign-in
+            let intendedRole = 'parent';
+            try {
+              intendedRole = sessionStorage.getItem('nishchit_auth_role') || 'parent';
+            } catch {}
 
             const newProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
               fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              role: initialRole,
-              status: initialRole === 'driver' ? 'pending' : 'active',
-              verificationStatus: initialRole === 'driver' ? 'pending' : 'approved',
+              role: intendedRole,
+              status: intendedRole === 'driver' ? 'pending' : 'active',
+              verificationStatus: intendedRole === 'driver' ? 'pending' : 'approved',
               createdAt: Date.now(),
               updatedAt: Date.now()
             };
@@ -90,59 +113,68 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const loginWithCredentials = async (email, password, expectedRole = 'parent') => {
-    const cleanEmail = (email || '').trim();
-    let res;
-    try {
-      res = await signInWithEmailAndPassword(auth, cleanEmail, password);
-    } catch (err) {
-      // If user does not exist in Firebase Auth yet, auto-create the account seamlessly
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        try {
-          res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-        } catch (createErr) {
-          // If the email is already registered and creation failed, re-throw the original auth error
-          if (createErr.code === 'auth/email-already-in-use') {
-            throw err;
-          }
-          throw createErr;
-        }
-      } else {
-        throw err;
-      }
+  /**
+   * Temporary hackathon admin authentication handler.
+   * Credentials: ID = admin123, Password = admin123
+   * Not for public registration or production use.
+   */
+  const loginAsAdminHackathon = async (adminId, adminPassword) => {
+    const cleanId = (adminId || '').trim();
+    const cleanPassword = (adminPassword || '').trim();
+
+    if (!cleanId || !cleanPassword) {
+      throw new Error('Please enter both administrator ID and password.');
     }
 
-    let profile = await getUserProfile(res.user.uid);
-    
-    if (!profile) {
-      const emailLower = cleanEmail.toLowerCase();
-      const role = emailLower.includes('admin') ? 'admin' : (emailLower.includes('driver') ? 'driver' : expectedRole);
-      profile = {
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.displayName || res.user.email.split('@')[0],
-        fullName: res.user.displayName || res.user.email.split('@')[0],
-        role,
-        status: role === 'driver' ? 'pending' : 'active',
-        verificationStatus: role === 'driver' ? 'pending' : 'approved',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      try {
-        await saveUserProfile(res.user.uid, profile);
-      } catch (e) {
-        console.warn('Profile save note:', e);
-      }
+    if (cleanId !== 'admin123' || cleanPassword !== 'admin123') {
+      throw new Error('Incorrect admin ID or password.');
     }
-    
-    setCurrentUser(profile);
-    return profile;
+
+    // TEMPORARY HACKATHON ADMIN ACCESS - NOT FOR PRODUCTION
+    const adminProfile = {
+      uid: 'admin-controller-session',
+      id: 'admin123',
+      email: 'admin@nishchit.app',
+      name: 'Transport Controller',
+      fullName: 'Transport Administrator',
+      role: 'admin',
+      status: 'active',
+      verificationStatus: 'approved',
+      institutionName: 'Andhra Pradesh Educational Corridor Transport Desk',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+    } catch (e) {
+      console.warn('Could not store admin session in localStorage:', e);
+    }
+
+    setCurrentUser(adminProfile);
+    return adminProfile;
   };
 
+  /**
+   * Primary user authentication method for Parent and Driver.
+   */
   const loginWithGoogle = async (preferredRole = 'parent') => {
+    try {
+      sessionStorage.setItem('nishchit_auth_role', preferredRole);
+    } catch {}
+
+    // Clear any previous admin session
+    try {
+      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     const res = await signInWithPopup(auth, provider);
     const user = res.user;
+
     let profile = await getUserProfile(user.uid);
     if (!profile) {
       profile = {
@@ -161,44 +193,26 @@ export function AuthProvider({ children }) {
       } catch (e) {
         console.warn('Profile save note:', e);
       }
+    } else if (preferredRole && profile.role !== preferredRole) {
+      // Allow seamless demo switching between driver and parent with the same Google email
+      profile.role = preferredRole;
+      if (preferredRole === 'driver' && !profile.verificationStatus) {
+        profile.status = 'pending';
+        profile.verificationStatus = 'pending';
+      }
+      try {
+        await saveUserProfile(user.uid, {
+          role: preferredRole,
+          ...(preferredRole === 'driver' ? {
+            status: profile.status || 'pending',
+            verificationStatus: profile.verificationStatus || 'pending'
+          } : {})
+        });
+      } catch (e) {
+        console.warn('Role switch note:', e);
+      }
     }
-    setCurrentUser(profile);
-    return profile;
-  };
 
-  const signupWithCredentials = async (email, password, role = 'parent', details = {}) => {
-    const cleanEmail = (email || '').trim();
-    const res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-    const user = res.user;
-
-    const profile = {
-      uid: user.uid,
-      email: user.email,
-      role,
-      name: details.name || details.fullName || cleanEmail.split('@')[0],
-      fullName: details.fullName || details.name || cleanEmail.split('@')[0],
-      phone: details.phone || '',
-      status: role === 'driver' ? 'pending' : 'active',
-      verificationStatus: role === 'driver' ? 'pending' : 'approved',
-      busId: details.busId || null,
-      busNumber: details.busNumber || null,
-      routeId: details.routeId || null,
-      childName: details.childName || details.studentName || null,
-      studentName: details.studentName || details.childName || null,
-      studentRollNo: details.studentRollNo || null,
-      institutionId: details.institutionId || 'INST-MVGR',
-      institutionName: details.institutionName || 'MVGR College of Engineering',
-      stopName: details.stopName || 'Mayuri Junction / Balaji Nagar',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      ...details
-    };
-
-    try {
-      await saveUserProfile(user.uid, profile);
-    } catch (e) {
-      console.warn('Profile save note:', e);
-    }
     setCurrentUser(profile);
     return profile;
   };
@@ -207,6 +221,16 @@ export function AuthProvider({ children }) {
     if (!currentUser?.uid) return;
     const updated = { ...currentUser, ...updates, updatedAt: Date.now() };
     setCurrentUser(updated);
+
+    // If admin session, update localStorage as well
+    if (currentUser.role === 'admin') {
+      try {
+        localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+    }
+
     try {
       await saveUserProfile(currentUser.uid, updates);
     } catch (e) {
@@ -215,6 +239,13 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    try {
+      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      sessionStorage.removeItem('nishchit_auth_role');
+    } catch {
+      // Ignore
+    }
+
     try {
       await signOut(auth);
     } catch (e) {
@@ -228,9 +259,8 @@ export function AuthProvider({ children }) {
       value={{
         currentUser,
         loading,
-        loginWithCredentials,
         loginWithGoogle,
-        signupWithCredentials,
+        loginAsAdminHackathon,
         updateCurrentUserProfile,
         logout
       }}
@@ -239,3 +269,4 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+

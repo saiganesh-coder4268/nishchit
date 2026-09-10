@@ -181,69 +181,102 @@ export function subscribeDriverApplications(callback) {
   );
 }
 
-export async function approveDriverApplication(appId, driverId, busId, routeId, adminUid = 'admin') {
+export async function approveDriverApplication(appId, driverId, busId = null, routeId = null, adminUid = 'admin') {
   const now = Date.now();
+  const effectiveBusId = busId || 'BUS-24';
+  const effectiveRouteId = routeId || 'ROUTE-VZ04';
+
   const updates = {
     status: 'approved',
     verificationStatus: 'approved',
     reviewedAt: now,
     reviewedBy: adminUid,
-    assignedBusId: busId,
-    assignedRouteId: routeId,
+    assignedBusId: effectiveBusId,
+    assignedRouteId: effectiveRouteId,
+    busId: effectiveBusId,
+    routeId: effectiveRouteId,
     rejectionReason: null
   };
 
   // Update application
-  await updateDoc(doc(db, 'driverApplications', appId), updates);
+  try {
+    await updateDoc(doc(db, 'driverApplications', appId), updates);
+  } catch (e) {
+    console.warn('Driver application update note:', e);
+  }
 
   // Fetch application details to get name and phone
-  const appSnap = await getDoc(doc(db, 'driverApplications', appId));
-  const appData = appSnap.exists() ? appSnap.data() : {};
-  const driverName = appData.fullName || appData.name || 'Verified Driver';
-  const driverPhone = appData.phone || '';
+  let driverName = 'Verified Driver';
+  let driverPhone = '';
+  try {
+    const appSnap = await getDoc(doc(db, 'driverApplications', appId));
+    if (appSnap.exists()) {
+      const appData = appSnap.data();
+      driverName = appData.fullName || appData.name || driverName;
+      driverPhone = appData.phone || '';
+    }
+  } catch (e) {
+    console.warn('App details fetch note:', e);
+  }
 
   // Update driver user document
   const targetUid = driverId || appId;
-  await saveUserProfile(targetUid, {
+  const userUpdates = {
     status: 'approved',
     verificationStatus: 'approved',
-    busId,
-    routeId,
     reviewedAt: now,
-    reviewedBy: adminUid
-  });
+    reviewedBy: adminUid,
+    busId: effectiveBusId,
+    assignedBusId: effectiveBusId,
+    busNumber: 'Bus 24',
+    routeId: effectiveRouteId,
+    assignedRouteId: effectiveRouteId,
+    routeName: 'Route 04 (Vizianagaram -> Visakhapatnam)',
+    rejectionReason: null
+  };
 
-  // Assign driver to the bus
-  if (busId) {
-    await updateDoc(doc(db, 'buses', busId), {
-      driverId: targetUid,
-      driverName,
-      driverPhone,
-      routeId,
-      status: 'ASSIGNED',
-      updatedAt: now
-    });
+  await saveUserProfile(targetUid, userUpdates);
+
+  // Assign driver to the bus if busId is specified
+  if (effectiveBusId) {
+    try {
+      await updateDoc(doc(db, 'buses', effectiveBusId), {
+        driverId: targetUid,
+        driverName,
+        driverPhone,
+        routeId: effectiveRouteId,
+        status: 'ASSIGNED',
+        updatedAt: now
+      });
+    } catch (e) {
+      console.warn('Bus update note:', e);
+    }
   }
 
-  // Update route with assigned driver and bus
-  if (routeId) {
-    await updateDoc(doc(db, 'routes', routeId), {
-      driverId: targetUid,
-      driverName,
-      busId,
-      updatedAt: now
-    });
+  // Update route with assigned driver and bus if routeId is specified
+  if (effectiveRouteId) {
+    try {
+      await updateDoc(doc(db, 'routes', effectiveRouteId), {
+        driverId: targetUid,
+        driverName,
+        busId: effectiveBusId,
+        updatedAt: now
+      });
+    } catch (e) {
+      console.warn('Route update note:', e);
+    }
   }
 }
 
 export async function rejectDriverApplication(appId, driverId, rejectionReason, adminUid = 'admin') {
   const now = Date.now();
+  const reasonText = (rejectionReason || '').trim() || 'Application credentials could not be verified by transport administration.';
   const updates = {
     status: 'rejected',
     verificationStatus: 'rejected',
     reviewedAt: now,
     reviewedBy: adminUid,
-    rejectionReason: rejectionReason || 'Application details could not be verified by transport administration.'
+    rejectionReason: reasonText
   };
 
   await updateDoc(doc(db, 'driverApplications', appId), updates);
@@ -252,7 +285,7 @@ export async function rejectDriverApplication(appId, driverId, rejectionReason, 
   await saveUserProfile(targetUid, {
     status: 'rejected',
     verificationStatus: 'rejected',
-    rejectionReason: updates.rejectionReason,
+    rejectionReason: reasonText,
     reviewedAt: now,
     reviewedBy: adminUid
   });
@@ -716,3 +749,166 @@ export async function submitIncidentReport(report) {
   await setDoc(doc(db, 'reports', reportId), payload);
   return payload;
 }
+
+// ---------------------------------------------------------------------------
+// 9. SCHEDULE MANAGEMENT & DRIVER ASSIGNMENT
+// ---------------------------------------------------------------------------
+
+export async function assignDriverToBusAndRoute({ driverId, busId, routeId, schedule = {} }) {
+  if (!driverId) return;
+  const now = Date.now();
+
+  // Get driver info
+  const driverProfile = await getUserProfile(driverId);
+  const driverName = driverProfile?.fullName || driverProfile?.name || 'Driver';
+  const driverPhone = driverProfile?.phone || '';
+
+  // Get bus info
+  let busNumber = '';
+  let busRegistration = '';
+  if (busId) {
+    const busSnap = await getDoc(doc(db, 'buses', busId));
+    if (busSnap.exists()) {
+      busNumber = busSnap.data().busNumber || '';
+      busRegistration = busSnap.data().registrationNumber || '';
+    }
+  }
+
+  // Get route info
+  let routeName = '';
+  let routeCode = '';
+  if (routeId) {
+    const routeSnap = await getDoc(doc(db, 'routes', routeId));
+    if (routeSnap.exists()) {
+      routeName = routeSnap.data().routeName || routeSnap.data().name || '';
+      routeCode = routeSnap.data().code || '';
+    }
+  }
+
+  // 1. Update user profile
+  await saveUserProfile(driverId, {
+    busId: busId || null,
+    busNumber: busNumber || null,
+    busRegistrationNumber: busRegistration || null,
+    routeId: routeId || null,
+    routeName: routeName || null,
+    routeCode: routeCode || null,
+    departureTime: schedule.departureTime || '07:15 AM',
+    expectedArrival: schedule.expectedArrival || '08:20 AM',
+    reportingTime: schedule.reportingTime || '06:50 AM',
+    updatedAt: now
+  });
+
+  // 2. Update bus
+  if (busId) {
+    await updateDoc(doc(db, 'buses', busId), {
+      driverId,
+      driverName,
+      driverPhone,
+      routeId: routeId || null,
+      routeName: routeName || null,
+      routeNumber: routeCode || null,
+      status: 'ASSIGNED',
+      updatedAt: now
+    });
+  }
+
+  // 3. Update route
+  if (routeId) {
+    await updateDoc(doc(db, 'routes', routeId), {
+      driverId,
+      driverName,
+      busId: busId || null,
+      departureTime: schedule.departureTime || '07:15 AM',
+      expectedArrival: schedule.expectedArrival || '08:20 AM',
+      reportingTime: schedule.reportingTime || '06:50 AM',
+      updatedAt: now
+    });
+  }
+}
+
+export function subscribeSchedules(callback) {
+  const colRef = collection(db, 'schedules');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const schedules = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      schedules.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      callback(schedules);
+    },
+    (err) => {
+      console.warn('subscribeSchedules error:', err);
+      callback([]);
+    }
+  );
+}
+
+export async function createSchedule(scheduleData) {
+  const scheduleId = scheduleData.scheduleId || scheduleData.id || `SCHED-${Date.now().toString().slice(-6)}`;
+  const now = Date.now();
+  const payload = {
+    id: scheduleId,
+    scheduleId,
+    busId: scheduleData.busId || '',
+    busNumber: scheduleData.busNumber || '',
+    driverId: scheduleData.driverId || '',
+    driverName: scheduleData.driverName || '',
+    routeId: scheduleData.routeId || '',
+    routeName: scheduleData.routeName || '',
+    routeCode: scheduleData.routeCode || '',
+    operatingDay: scheduleData.operatingDay || 'Daily (Monday - Saturday)',
+    departureTime: scheduleData.departureTime || '07:15 AM',
+    reportingTime: scheduleData.reportingTime || '06:50 AM',
+    expectedArrival: scheduleData.expectedArrival || '08:20 AM',
+    stops: scheduleData.stops || [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await setDoc(doc(db, 'schedules', scheduleId), payload);
+
+  // Synchronously update driver, bus, and route assignments
+  if (payload.driverId) {
+    await assignDriverToBusAndRoute({
+      driverId: payload.driverId,
+      busId: payload.busId,
+      routeId: payload.routeId,
+      schedule: {
+        departureTime: payload.departureTime,
+        reportingTime: payload.reportingTime,
+        expectedArrival: payload.expectedArrival
+      }
+    });
+  }
+
+  return payload;
+}
+
+export async function updateSchedule(scheduleId, updates) {
+  if (!scheduleId) return;
+  const now = Date.now();
+  const payload = {
+    ...updates,
+    updatedAt: now
+  };
+  await updateDoc(doc(db, 'schedules', scheduleId), payload);
+
+  if (updates.driverId) {
+    await assignDriverToBusAndRoute({
+      driverId: updates.driverId,
+      busId: updates.busId,
+      routeId: updates.routeId,
+      schedule: {
+        departureTime: updates.departureTime,
+        reportingTime: updates.reportingTime,
+        expectedArrival: updates.expectedArrival
+      }
+    });
+  }
+}
+
+export async function deleteSchedule(scheduleId) {
+  if (!scheduleId) return;
+  await deleteDoc(doc(db, 'schedules', scheduleId));
+}
+

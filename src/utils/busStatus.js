@@ -84,15 +84,15 @@ export function getParentStatusInfo(busData, now = Date.now()) {
     case 'LIVE':
       return {
         status: 'LIVE',
-        title: 'ON THE WAY',
-        subtitle: `Bus is moving — Updated ${formatRelativeTime(lastUpdated)}`
+        title: 'LIVE',
+        subtitle: `Bus is on the way — Updated ${formatRelativeTime(lastUpdated)}`
       };
 
     case 'STALE':
       return {
         status: 'STALE',
-        title: 'LOCATION MAY BE OUTDATED',
-        subtitle: `Location hasn't updated recently — Last received ${formatRelativeTime(lastUpdated)}. Showing last known position.`
+        title: 'LAST KNOWN LOCATION',
+        subtitle: `Bus location temporarily unavailable — Last received ${formatRelativeTime(lastUpdated)}. Showing last known position.`
       };
 
     case 'UNAVAILABLE':
@@ -100,28 +100,28 @@ export function getParentStatusInfo(busData, now = Date.now()) {
         return {
           status: 'UNAVAILABLE',
           title: 'LOCATION UNAVAILABLE',
-          subtitle: `Location stream interrupted — Last update received ${formatRelativeTime(lastUpdated)}.`
+          subtitle: `Bus location temporarily unavailable.${lastUpdated ? ` Last location received ${formatRelativeTime(lastUpdated)}.` : ''}`
         };
       }
       return {
         status: 'UNAVAILABLE',
         title: 'LOCATION UNAVAILABLE',
-        subtitle: 'No valid location coordinates received for this bus.'
+        subtitle: 'Bus location is currently unavailable.'
       };
 
     case 'COMPLETED':
       return {
         status: 'COMPLETED',
         title: 'TRIP COMPLETED',
-        subtitle: `Today's bus trip has ended safely.${lastUpdated ? ` Last position ${formatRelativeTime(lastUpdated)}.` : ''}`
+        subtitle: `Trip completed. Bus has reached the destination.${lastUpdated ? ` Final update ${formatRelativeTime(lastUpdated)}.` : ''}`
       };
 
     case 'NOT_STARTED':
     default:
       return {
         status: 'NOT_STARTED',
-        title: 'TRIP NOT STARTED',
-        subtitle: "The bus has not departed yet today."
+        title: 'BUS NOT STARTED',
+        subtitle: "Your bus has not started today's trip yet."
       };
   }
 }

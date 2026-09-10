@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
 import { ShieldCheck, Clock, Bus, MapPin } from 'lucide-react';
 import { isValidCoordinate, calculateLocationFreshness } from '../utils/busStatus';
@@ -34,7 +34,7 @@ const getBusMarkerIcon = (isLive) => {
 };
 
 
-export default function BusMap({ busData }) {
+export default function BusMap({ busData, focusTrigger = 0 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: GOOGLE_MAPS_API_KEY
@@ -43,6 +43,8 @@ export default function BusMap({ busData }) {
   const [map, setMap] = useState(null);
   const [showInfoWindow, setShowInfoWindow] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const hasCenteredInitially = useRef(false);
+  const prevTripStatus = useRef(busData?.status);
 
   // Continuous freshness ticker
   useEffect(() => {
@@ -74,12 +76,30 @@ export default function BusMap({ busData }) {
     setMap(null);
   }, []);
 
-  // Smoothly re-center Google Map when bus coordinates move
+  // Reset center flag when a trip starts newly so it centers once on new active coordinates
   useEffect(() => {
-    if (map && latitude && longitude) {
+    if (prevTripStatus.current !== tripStatus && tripStatus === 'LIVE') {
+      hasCenteredInitially.current = false;
+    }
+    prevTripStatus.current = tripStatus;
+  }, [tripStatus]);
+
+  // Initial centering when valid coordinates first arrive — without continuously hijacking camera
+  useEffect(() => {
+    if (map && latitude && longitude && !hasCenteredInitially.current) {
       map.panTo({ lat: latitude, lng: longitude });
+      map.setZoom(15);
+      hasCenteredInitially.current = true;
     }
   }, [map, latitude, longitude]);
+
+  // Re-center explicitly on user action ("Center on bus" / focusTrigger)
+  useEffect(() => {
+    if (focusTrigger > 0 && map && latitude && longitude) {
+      map.panTo({ lat: latitude, lng: longitude });
+      map.setZoom(16);
+    }
+  }, [focusTrigger, map, latitude, longitude]);
 
   const formatTime = (ts) => {
     if (!ts) return 'No update received';
@@ -109,7 +129,28 @@ export default function BusMap({ busData }) {
   }
 
   if (!center) {
-    return <div className="bus-map-wrapper map-empty-state"><MapPin size={28}/><strong>No location has been shared yet</strong><p>The map will appear after the assigned driver starts an authorized trip.</p></div>;
+    return (
+      <div className="bus-map-wrapper map-empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '380px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', padding: '30px' }}>
+        <MapPin size={28} color="#64748b" style={{ marginBottom: '10px' }} />
+        <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>No location has been shared yet</strong>
+        <p style={{ color: '#64748b', fontSize: '0.9rem' }}>The map will appear after the assigned driver starts an authorized trip.</p>
+      </div>
+    );
+  }
+
+  // Before trip departs: Show honest waiting state without live moving marker
+  if (tripStatus === 'NOT_STARTED' || tripStatus === 'AVAILABLE' || tripStatus === 'ASSIGNED') {
+    return (
+      <div className="bus-map-wrapper map-empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '380px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', padding: '30px' }}>
+        <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+          <Bus size={28} color="#2563eb" />
+        </div>
+        <strong style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '6px' }}>Bus has not started today's trip yet</strong>
+        <p style={{ color: '#64748b', maxWidth: '420px', margin: 0, fontSize: '0.92rem', lineHeight: 1.5 }}>
+          Live Google Maps tracking will activate automatically when the driver starts the authorized trip.
+        </p>
+      </div>
+    );
   }
 
   const getStatusText = () => {

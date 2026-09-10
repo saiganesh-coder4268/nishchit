@@ -39,9 +39,20 @@ function AppContent() {
   const { currentUser, logout, loading } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+
+  const getAuthenticatedHome = () => {
+    if (!currentUser) return <LandingPage />;
+    if (currentUser.role === 'driver') {
+      return <Navigate to="/driver/dashboard" replace />;
+    }
+    if (currentUser.role === 'admin') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    return <Navigate to="/parent/dashboard" replace />;
   };
 
   return (
@@ -49,19 +60,32 @@ function AppContent() {
       <Navbar currentUser={currentUser} onLogout={handleLogout} />
       <main className="main-content">
         <Routes>
+          {/* ROOT ROUTE: PUBLIC LANDING ONLY FOR LOGGED-OUT USERS */}
           <Route
             path="/"
-            element={<LandingPage />}
+            element={getAuthenticatedHome()}
           />
           
           {/* DRIVER PORTAL */}
           <Route
             path="/driver/login"
-            element={<DriverLogin />}
+            element={
+              currentUser?.role === 'driver' ? (
+                <Navigate to={(currentUser.verificationStatus || '').toLowerCase() === 'approved' ? "/driver/dashboard" : "/driver/onboarding"} replace />
+              ) : currentUser ? (
+                getAuthenticatedHome()
+              ) : (
+                <DriverLogin />
+              )
+            }
           />
           <Route
             path="/driver/onboarding"
-            element={<DriverOnboarding />}
+            element={
+              <ProtectedRoute allowedRole="driver" currentUser={currentUser} loading={loading}>
+                <DriverOnboarding />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/driver/dashboard"
@@ -75,7 +99,15 @@ function AppContent() {
           {/* PARENT PORTAL */}
           <Route
             path="/parent/login"
-            element={<ParentLogin />}
+            element={
+              currentUser?.role === 'parent' ? (
+                <Navigate to="/parent/dashboard" replace />
+              ) : currentUser ? (
+                getAuthenticatedHome()
+              ) : (
+                <ParentLogin />
+              )
+            }
           />
           <Route
             path="/parent/dashboard"
@@ -89,7 +121,15 @@ function AppContent() {
           {/* ADMIN PORTAL */}
           <Route
             path="/admin/login"
-            element={<AdminLogin />}
+            element={
+              currentUser?.role === 'admin' ? (
+                <Navigate to="/admin/dashboard" replace />
+              ) : currentUser ? (
+                getAuthenticatedHome()
+              ) : (
+                <AdminLogin />
+              )
+            }
           />
           <Route
             path="/admin/dashboard"
@@ -100,13 +140,15 @@ function AppContent() {
             }
           />
 
+          {/* CATCH-ALL REDIRECT */}
           <Route
             path="*"
-            element={<Navigate to="/" replace />}
+            element={currentUser ? getAuthenticatedHome() : <Navigate to="/" replace />}
           />
         </Routes>
       </main>
-      <Footer />
+      {/* Footer is only rendered on public marketing pages */}
+      {!currentUser && <Footer />}
     </>
   );
 }
