@@ -3,20 +3,18 @@ import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
 
-const required = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID'];
-if (required.some(key => !import.meta.env[key])) {
-  console.warn('Nishchit configuration is incomplete. Add Firebase values to .env before deploying.');
-}
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyD8UoO7uC7QOxJX8vlKlICUL_yN5baDvVY',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'nishchit-eb118.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nishchit-eb118',
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://nishchit-eb118-default-rtdb.firebaseio.com',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'nishchit-eb118.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '562414852235',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:562414852235:web:726efe1823d7d9eb1d1c8e',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-948BF43LYD'
+};
 
-const app = initializeApp({
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-});
+const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const rtdb = getDatabase(app);

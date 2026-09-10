@@ -3,7 +3,7 @@ import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-m
 import { ShieldCheck, Clock, Bus, MapPin } from 'lucide-react';
 import { isValidCoordinate, calculateLocationFreshness } from '../utils/busStatus';
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyAdBCvhV_RinMaCyH0xs2yWYvFZ1t_rmCM';
 
 const containerStyle = {
   width: '100%',
