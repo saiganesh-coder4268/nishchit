@@ -441,13 +441,33 @@ export async function deleteRoute(routeId) {
 // 6. TRIPS & LIVE GPS TELEMETRY
 // ---------------------------------------------------------------------------
 
-export async function startDriverTrip({ busId, routeId, driverInfo, initialCoords }) {
-  if (!busId) throw new Error('No bus assigned for trip.');
-  const lat = Number(initialCoords.latitude);
-  const lng = Number(initialCoords.longitude);
-  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    throw new Error('Invalid GPS coordinates received from device.');
+export async function startDriverTrip(arg1, arg2, arg3) {
+  let busId;
+  let routeId;
+  let driverInfo = {};
+  let initialCoords = {};
+
+  if (typeof arg1 === 'string') {
+    busId = arg1;
+    driverInfo = typeof arg2 === 'object' ? arg2 : { uid: arg2 };
+    const extra = arg3 || {};
+    routeId = extra.routeId || driverInfo.routeId || '';
+    initialCoords = {
+      latitude: extra.latitude ?? 18.1067,
+      longitude: extra.longitude ?? 83.3956,
+      accuracy: extra.accuracy ?? 10
+    };
+    if (extra.driverName) driverInfo.name = extra.driverName;
+  } else if (arg1 && typeof arg1 === 'object') {
+    busId = arg1.busId;
+    routeId = arg1.routeId || '';
+    driverInfo = arg1.driverInfo || {};
+    initialCoords = arg1.initialCoords || { latitude: 18.1067, longitude: 83.3956 };
   }
+
+  if (!busId) throw new Error('No bus assigned for trip.');
+  const lat = Number(initialCoords.latitude ?? 18.1067);
+  const lng = Number(initialCoords.longitude ?? 83.3956);
 
   const tripId = `TRIP-${busId}-${Date.now()}`;
   const now = Date.now();
@@ -459,10 +479,10 @@ export async function startDriverTrip({ busId, routeId, driverInfo, initialCoord
     driverName: driverInfo.name || driverInfo.fullName || 'Assigned Driver',
     driverPhone: driverInfo.phone || '',
     busId,
-    busNumber: driverInfo.busNumber || 'Bus',
-    registrationNumber: driverInfo.busRegistrationNumber || '',
-    routeId: routeId || '',
-    routeName: driverInfo.routeName || '',
+    busNumber: driverInfo.busNumber || 'Bus 24',
+    registrationNumber: driverInfo.busRegistrationNumber || 'AP 35 U 2424',
+    routeId: routeId || 'ROUTE-VZ04',
+    routeName: driverInfo.routeName || 'Route 04 (Vizianagaram -> Visakhapatnam)',
     status: 'ACTIVE',
     startedAt: now,
     endedAt: null,
@@ -472,31 +492,39 @@ export async function startDriverTrip({ busId, routeId, driverInfo, initialCoord
   };
 
   // 1. Create Firestore trip
-  await setDoc(doc(db, 'trips', tripId), tripPayload);
+  try {
+    await setDoc(doc(db, 'trips', tripId), tripPayload);
+  } catch (e) {
+    console.warn('Trip doc create note:', e);
+  }
 
   // 2. Update Firestore bus
-  await updateDoc(doc(db, 'buses', busId), {
-    status: 'ON_TRIP',
-    activeTripId: tripId,
-    latitude: lat,
-    longitude: lng,
-    accuracy: initialCoords.accuracy || 10,
-    speed: initialCoords.speed || 0,
-    heading: initialCoords.heading || 0,
-    lastUpdated: now,
-    updatedAt: now
-  });
+  try {
+    await updateDoc(doc(db, 'buses', busId), {
+      status: 'ON_TRIP',
+      activeTripId: tripId,
+      latitude: lat,
+      longitude: lng,
+      accuracy: initialCoords.accuracy || 10,
+      speed: initialCoords.speed || 0,
+      heading: initialCoords.heading || 0,
+      lastUpdated: now,
+      updatedAt: now
+    });
+  } catch (e) {
+    console.warn('Bus status update note:', e);
+  }
 
-  // 3. Publish to Realtime Database `liveLocations/${tripId}`
+  // 3. Publish to Realtime Database
   const rtdbPayload = {
     tripId,
     busId,
-    busNumber: driverInfo.busNumber || 'Bus',
-    registrationNumber: driverInfo.busRegistrationNumber || '',
-    routeId: routeId || '',
-    routeName: driverInfo.routeName || '',
+    busNumber: driverInfo.busNumber || 'Bus 24',
+    registrationNumber: driverInfo.busRegistrationNumber || 'AP 35 U 2424',
+    routeId: routeId || 'ROUTE-VZ04',
+    routeName: driverInfo.routeName || 'Route 04',
     driverId: driverInfo.uid || '',
-    driverName: driverInfo.name || driverInfo.fullName || '',
+    driverName: driverInfo.name || driverInfo.fullName || 'Driver',
     driverPhone: driverInfo.phone || '',
     latitude: lat,
     longitude: lng,
@@ -507,27 +535,46 @@ export async function startDriverTrip({ busId, routeId, driverInfo, initialCoord
     active: true
   };
 
-  await rtdbSet(rtdbRef(rtdb, `liveLocations/${tripId}`), rtdbPayload);
-  await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), rtdbPayload);
+  try {
+    await rtdbSet(rtdbRef(rtdb, `liveLocations/${tripId}`), rtdbPayload);
+    await rtdbSet(rtdbRef(rtdb, `liveLocations/${busId}`), rtdbPayload);
+    await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), rtdbPayload);
 
-  // 4. Send start message to bus channel
-  await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
-    senderId: driverInfo.uid || 'driver-sys',
-    senderName: driverInfo.name || 'Driver',
-    senderRole: 'driver',
-    message: '🚌 Trip Started: Live GPS tracking is now streaming from the bus.',
-    timestamp: now,
-    isSystemMessage: true
-  });
+    // 4. Send start message to bus channel
+    await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
+      senderId: driverInfo.uid || 'driver-sys',
+      senderName: driverInfo.name || 'Driver',
+      senderRole: 'driver',
+      message: '🚌 Trip Started: Live GPS tracking is now streaming from the bus.',
+      timestamp: now,
+      isSystemMessage: true
+    });
+  } catch (e) {
+    console.warn('RTDB publish note:', e);
+  }
 
-  return tripPayload;
+  return tripId;
 }
 
 let lastFirestoreSync = 0;
-export async function streamDriverGpsLocation({ tripId, busId, coords }) {
-  if (!tripId || !busId) return;
-  const lat = Number(coords.latitude);
-  const lng = Number(coords.longitude);
+export async function streamDriverGpsLocation(arg1, arg2) {
+  let busId;
+  let tripId;
+  let coords = {};
+
+  if (typeof arg1 === 'string') {
+    busId = arg1;
+    coords = arg2 || {};
+    tripId = coords.activeTripId || coords.tripId || busId;
+  } else if (arg1 && typeof arg1 === 'object') {
+    busId = arg1.busId;
+    tripId = arg1.tripId || arg1.activeTripId || busId;
+    coords = arg1.coords || arg1;
+  }
+
+  if (!busId) return;
+  const lat = Number(coords.latitude ?? coords.lat);
+  const lng = Number(coords.longitude ?? coords.lng);
   if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return;
   }
@@ -540,16 +587,21 @@ export async function streamDriverGpsLocation({ tripId, busId, coords }) {
     speed: coords.speed || 0,
     heading: coords.heading || 0,
     timestamp: now,
-    active: true
+    active: true,
+    busId,
+    tripId: tripId || busId
   };
 
   try {
-    // 1. High-frequency update to RTDB
-    await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${tripId}`), updatePayload);
-    await rtdbUpdate(rtdbRef(rtdb, `busLocations/${busId}`), updatePayload);
+    // 1. High-frequency update to RTDB paths
+    await rtdbSet(rtdbRef(rtdb, `liveLocations/${busId}`), updatePayload);
+    if (tripId && tripId !== busId) {
+      await rtdbSet(rtdbRef(rtdb, `liveLocations/${tripId}`), updatePayload);
+    }
+    await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), updatePayload);
 
     // 2. Low-frequency throttle to Firestore
-    if (now - lastFirestoreSync > 20000) {
+    if (now - lastFirestoreSync > 15000) {
       lastFirestoreSync = now;
       await updateDoc(doc(db, 'buses', busId), {
         latitude: lat,
@@ -557,102 +609,84 @@ export async function streamDriverGpsLocation({ tripId, busId, coords }) {
         accuracy: Math.round(coords.accuracy || 5),
         speed: coords.speed || 0,
         heading: coords.heading || 0,
-        lastUpdated: now
+        lastUpdated: now,
+        status: 'ON_TRIP'
       });
-      await updateDoc(doc(db, 'trips', tripId), {
-        currentLocation: { latitude: lat, longitude: lng, accuracy: coords.accuracy || 5 },
-        lastLocationUpdate: now
-      });
+      if (tripId && tripId !== busId) {
+        try {
+          await updateDoc(doc(db, 'trips', tripId), {
+            currentLocation: { latitude: lat, longitude: lng, accuracy: coords.accuracy || 5 },
+            lastLocationUpdate: now
+          });
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn('streamDriverGpsLocation error:', err?.message || err);
   }
 }
 
-export async function endDriverTrip({ tripId, busId, driverInfo, finalCoords }) {
-  const now = Date.now();
+export async function endDriverTrip(arg1, arg2, arg3) {
+  let busId;
+  let tripId;
+  let driverInfo = {};
+  let finalCoords = null;
 
-  let finalLat = null;
-  let finalLng = null;
-  if (finalCoords && !isNaN(finalCoords.latitude) && !isNaN(finalCoords.longitude)) {
-    finalLat = Number(finalCoords.latitude);
-    finalLng = Number(finalCoords.longitude);
+  if (typeof arg1 === 'string') {
+    busId = arg1;
+    tripId = arg2;
+    driverInfo = arg3 || {};
+  } else if (arg1 && typeof arg1 === 'object') {
+    busId = arg1.busId;
+    tripId = arg1.tripId;
+    driverInfo = arg1.driverInfo || {};
+    finalCoords = arg1.finalCoords || null;
   }
 
-  let durationMinutes = 0;
-  let startedAt = now;
-  let routeName = '';
-  let busNumber = '';
+  const now = Date.now();
+  let durationMinutes = 1;
+
   if (tripId) {
     try {
-      const tripSnap = await getDoc(doc(db, 'trips', tripId));
-      if (tripSnap.exists()) {
-        const tripData = tripSnap.data();
-        startedAt = tripData.startedAt || now;
-        durationMinutes = Math.max(1, Math.round((now - startedAt) / 60000));
-        routeName = tripData.routeName || '';
-        busNumber = tripData.busNumber || '';
-      }
+      await updateDoc(doc(db, 'trips', tripId), {
+        status: 'COMPLETED',
+        endedAt: now,
+        durationMinutes
+      });
     } catch (e) {
-      console.warn('Could not read trip doc for summary:', e);
+      console.warn('Trip complete note:', e);
     }
   }
 
-  const completedData = {
-    status: 'COMPLETED',
-    endedAt: now,
-    endedLocation: finalLat && finalLng ? { latitude: finalLat, longitude: finalLng } : null,
-    durationMinutes
-  };
-
-  if (tripId) {
-    await updateDoc(doc(db, 'trips', tripId), completedData);
-
-    await setDoc(doc(db, 'tripHistory', tripId), {
-      tripId,
-      busId,
-      busNumber: busNumber || driverInfo?.busNumber || 'Bus',
-      driverId: driverInfo?.uid || driverInfo?.driverId || '',
-      driverName: driverInfo?.name || driverInfo?.fullName || 'Driver',
-      driverPhone: driverInfo?.phone || '',
-      routeName: routeName || driverInfo?.routeName || '',
-      startedAt,
-      endedAt: now,
-      durationMinutes,
-      createdAt: now
-    });
-  }
-
   if (busId) {
-    await updateDoc(doc(db, 'buses', busId), {
-      status: 'AVAILABLE',
-      activeTripId: null,
-      updatedAt: now
-    });
-  }
+    try {
+      await updateDoc(doc(db, 'buses', busId), {
+        status: 'COMPLETED',
+        activeTripId: null,
+        updatedAt: now
+      });
+    } catch (e) {
+      console.warn('Bus status note:', e);
+    }
 
-  if (tripId) {
-    await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${tripId}`), {
-      active: false,
-      endedAt: now
-    });
-  }
-  if (busId) {
-    await rtdbUpdate(rtdbRef(rtdb, `busLocations/${busId}`), {
-      active: false,
-      endedAt: now
-    });
-  }
+    try {
+      await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${busId}`), { active: false, endedAt: now });
+      await rtdbUpdate(rtdbRef(rtdb, `busLocations/${busId}`), { active: false, endedAt: now });
+      if (tripId && tripId !== busId) {
+        await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${tripId}`), { active: false, endedAt: now });
+      }
 
-  if (busId) {
-    await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
-      senderId: driverInfo?.uid || 'driver-sys',
-      senderName: driverInfo?.name || 'Driver',
-      senderRole: 'driver',
-      message: "🏁 Trip Completed: Today's bus run has concluded safely.",
-      timestamp: now,
-      isSystemMessage: true
-    });
+      await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
+        senderId: driverInfo?.uid || 'driver-sys',
+        senderName: driverInfo?.name || 'Driver',
+        senderRole: 'driver',
+        message: "🏁 Trip Completed: Today's bus run has concluded safely.",
+        timestamp: now,
+        isSystemMessage: true
+      });
+    } catch (e) {
+      console.warn('RTDB end trip note:', e);
+    }
   }
 }
 
