@@ -11,21 +11,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script>
-      // Automatically unregister any stale Service Worker from previous apps on localhost:5173
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (var i = 0; i < registrations.length; i++) {
-            registrations[i].unregister();
-          }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (var i = 0; i < names.length; i++) {
-            caches.delete(names[i]);
-          }
-        });
-      }
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var i = 0; i < registrations.length; i++) {
+              registrations[i].unregister();
+            }
+          }).catch(function() {});
+        }
+        if ('caches' in window) {
+          caches.keys().then(function(names) {
+            for (var i = 0; i < names.length; i++) {
+              caches.delete(names[i]);
+            }
+          }).catch(function() {});
+        }
+      } catch (e) {}
     </script>
   </head>
   <body>
