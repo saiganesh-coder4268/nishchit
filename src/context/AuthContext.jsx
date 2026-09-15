@@ -9,11 +9,13 @@ import { auth } from '../firebase';
 import {
   getUserProfile,
   saveUserProfile,
-  subscribeUserProfile,
-  ensureInitialCorridorData
+  subscribeUserProfile
 } from '../services/transportService';
+import { REGISTERED_INSTITUTIONS, INITIAL_VERIFIED_DRIVERS } from '../data/regionData';
 
+const USER_SESSION_STORAGE_KEY = 'nishchit_user_session';
 const ADMIN_SESSION_STORAGE_KEY = 'nishchit_admin_session';
+const PARENT_SESSION_STORAGE_KEY = 'nishchit_parent_session';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -21,9 +23,17 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
+      const savedUser = localStorage.getItem(USER_SESSION_STORAGE_KEY);
+      if (savedUser) {
+        return JSON.parse(savedUser);
+      }
       const savedAdmin = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
       if (savedAdmin) {
         return JSON.parse(savedAdmin);
+      }
+      const savedParent = localStorage.getItem(PARENT_SESSION_STORAGE_KEY);
+      if (savedParent) {
+        return JSON.parse(savedParent);
       }
     } catch {
       // Ignore
@@ -32,21 +42,34 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // Initialize fleet and routes in Firestore if empty
-  useEffect(() => {
-    ensureInitialCorridorData();
-  }, []);
-
   useEffect(() => {
     let unsubProfile = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      // If hackathon admin is currently active, preserve that session
+      // Preserve explicit manual/demo sessions for role evaluation
       try {
+        const savedUser = localStorage.getItem(USER_SESSION_STORAGE_KEY);
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          if (parsed && parsed.role) {
+            setCurrentUser(parsed);
+            setLoading(false);
+            return;
+          }
+        }
         const savedAdmin = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
         if (savedAdmin) {
           const parsed = JSON.parse(savedAdmin);
-          if (parsed && parsed.role === 'admin') {
+          if (parsed && (parsed.role === 'admin' || parsed.role === 'institution' || parsed.role === 'platform_admin')) {
+            setCurrentUser(parsed);
+            setLoading(false);
+            return;
+          }
+        }
+        const savedParent = localStorage.getItem(PARENT_SESSION_STORAGE_KEY);
+        if (savedParent) {
+          const parsed = JSON.parse(savedParent);
+          if (parsed && parsed.role === 'parent') {
             setCurrentUser(parsed);
             setLoading(false);
             return;
@@ -59,7 +82,7 @@ export function AuthProvider({ children }) {
       unsubProfile();
 
       if (!firebaseUser) {
-        setCurrentUser((prev) => (prev?.role === 'admin' ? prev : null));
+        setCurrentUser((prev) => (prev?.role ? prev : null));
         setLoading(false);
         return;
       }
@@ -240,7 +263,9 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
+      localStorage.removeItem(USER_SESSION_STORAGE_KEY);
       localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
       sessionStorage.removeItem('nishchit_auth_role');
     } catch {
       // Ignore
@@ -254,6 +279,134 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
   };
 
+  /**
+   * Platform Administrator Authentication (Ecosystem Command Center)
+   */
+  const loginAsPlatformAdmin = async () => {
+    try {
+      localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
+    } catch {}
+
+    const adminProfile = {
+      uid: 'platform-admin-session',
+      id: 'platform-operator',
+      email: 'admin@nishchit.app',
+      name: 'Platform Moderator',
+      fullName: 'Platform Operations Administrator',
+      role: 'platform_admin',
+      status: 'active',
+      verificationStatus: 'approved',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+      localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+    } catch {}
+
+    setCurrentUser(adminProfile);
+    return adminProfile;
+  };
+
+  /**
+   * Institution Administrator Authentication (School / College Transport Desk)
+   */
+  const loginAsInstitutionDemo = async (instId = 'INST-ABC-SCHOOL') => {
+    try {
+      localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
+    } catch {}
+
+    const inst = REGISTERED_INSTITUTIONS.find(i => i.id === instId) || REGISTERED_INSTITUTIONS[0];
+    const instProfile = {
+      uid: `inst-session-${inst.id}`,
+      id: inst.id,
+      email: `transport@${inst.id.toLowerCase().replace(/[^a-z0-9]/g, '')}.edu`,
+      name: `${inst.shortName} Desk`,
+      fullName: `${inst.name} Transport Controller`,
+      role: 'institution',
+      institutionId: inst.id,
+      institutionName: inst.name,
+      district: inst.district,
+      status: 'active',
+      verificationStatus: 'verified',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify(instProfile));
+      localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(instProfile));
+    } catch {}
+
+    setCurrentUser(instProfile);
+    return instProfile;
+  };
+
+  /**
+   * Driver Authentication (Independent Profile & Operational Cockpit)
+   */
+  const loginAsDriverDemo = async (driverId = 'DRV-RAVI-KUMAR') => {
+    try {
+      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
+    } catch {}
+
+    const drv = INITIAL_VERIFIED_DRIVERS.find(d => d.id === driverId) || INITIAL_VERIFIED_DRIVERS[0];
+    const driverProfile = {
+      ...drv,
+      uid: drv.id,
+      role: 'driver',
+      status: 'active',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify(driverProfile));
+    } catch {}
+
+    setCurrentUser(driverProfile);
+    return driverProfile;
+  };
+
+  /**
+   * Demo parent authentication handler for instant evaluation of GITAM -> MVP Colony journey.
+   */
+  const loginAsDemoParent = async () => {
+    try {
+      localStorage.removeItem(USER_SESSION_STORAGE_KEY);
+      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+
+    const demoParentProfile = {
+      uid: 'parent-demo-session',
+      id: 'demo-parent',
+      email: 'parent@gitam.edu',
+      name: 'Priya Sharma',
+      fullName: 'Priya Sharma',
+      role: 'parent',
+      status: 'active',
+      verificationStatus: 'approved',
+      institutionId: 'GITAM',
+      institutionName: 'GITAM University, Visakhapatnam',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify(demoParentProfile));
+      localStorage.setItem(PARENT_SESSION_STORAGE_KEY, JSON.stringify(demoParentProfile));
+    } catch (e) {
+      console.warn('Could not store parent demo session in localStorage:', e);
+    }
+
+    setCurrentUser(demoParentProfile);
+    return demoParentProfile;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -261,6 +414,10 @@ export function AuthProvider({ children }) {
         loading,
         loginWithGoogle,
         loginAsAdminHackathon,
+        loginAsPlatformAdmin,
+        loginAsInstitutionDemo,
+        loginAsDriverDemo,
+        loginAsDemoParent,
         updateCurrentUserProfile,
         logout
       }}

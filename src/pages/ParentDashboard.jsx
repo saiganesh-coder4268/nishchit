@@ -1,664 +1,822 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
-import CommunicationPanel from '../components/CommunicationPanel';
-import { Button } from '../components/ui';
+import ParentShell from '../components/shells/ParentShell';
 import {
-  subscribeSingleBus,
-  subscribeSingleRoute,
-  subscribeLiveLocation,
+  subscribeRoutes,
+  subscribeBuses,
   subscribeSchedules,
-  submitIncidentReport
+  subscribeActiveTrips,
+  subscribeLiveLocation,
+  findMatchingRoutes,
+  resolveBusJourneyDetails,
+  submitIncidentReport,
+  subscribeParentStudents
 } from '../services/transportService';
-import { getParentStatusInfo } from '../utils/busStatus';
-import { INITIAL_ROUTES, INITIAL_VEHICLES, REGISTERED_INSTITUTIONS } from '../data/regionData';
-import { ref, onValue } from 'firebase/database';
-import { rtdb } from '../firebase';
-import { 
-  MessageSquare, AlertCircle, MapPin, CheckCircle2, 
-  X, Navigation, Phone, UserCheck, Clock, Building2, Radio,
-  Edit3, ShieldCheck, Bus
+import { REGISTERED_INSTITUTIONS, INITIAL_ROUTES, INITIAL_VEHICLES } from '../data/regionData';
+import { isValidCoordinate } from '../utils/busStatus';
+import {
+  Search, Bus, MapPin, Clock, ArrowRight, CheckCircle2,
+  ChevronDown, Bell, User, Share2, List, Navigation,
+  AlertTriangle, ShieldCheck, RefreshCw, X, Radio
 } from 'lucide-react';
 
 export default function ParentDashboard() {
-  const { currentUser, updateCurrentUserProfile } = useAuth();
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const studentName = currentUser?.studentName || currentUser?.childName || '';
-  const busId = currentUser?.busId || (studentName ? 'BUS-24' : null);
-  const routeId = currentUser?.routeId || (busId === 'BUS-24' ? 'ROUTE-VZ04' : null);
+  // Primary Data Collections
+  const [routesList, setRoutesList] = useState([]);
+  const [fleetList, setFleetList] = useState([]);
+  const [schedulesList, setSchedulesList] = useState([]);
+  const [activeTripsList, setActiveTripsList] = useState([]);
+  const [liveLocations, setLiveLocations] = useState({});
 
-  const [busData, setBusData] = useState({
-    id: busId || 'BUS-24',
-    busNumber: currentUser?.busNumber || 'Bus 24',
-    registrationNumber: currentUser?.busRegistrationNumber || 'AP 35 U 2424',
-    routeName: currentUser?.routeName || 'Route 04 (Vizianagaram RTC Complex -> MVGR Campus)',
-    routeNumber: 'ROUTE 04',
-    status: 'NOT_STARTED',
-    latitude: 18.1145,
-    longitude: 83.4021,
-    accuracy: 8,
-    speed: 0,
-    startedAt: null,
-    endedAt: null,
-    lastUpdated: null,
-    driverName: 'Rajesh Kumar',
-    driverPhone: '+91 98765 43210'
-  });
+  // Multi-student support
+  const [students, setStudents] = useState([]);
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
 
-  const [routeData, setRouteData] = useState(null);
-  const [scheduleData, setScheduleData] = useState(null);
-  const [showCommPanel, setShowCommPanel] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [showEditChildModal, setShowEditChildModal] = useState(false);
-  
-  const [reportType, setReportType] = useState("Bus hasn't moved / Delay");
-  const [reportDesc, setReportDesc] = useState('');
-  const [reportSubmitted, setReportSubmitted] = useState(false);
-  
-  // Child edit state
-  const [editStudentName, setEditStudentName] = useState(currentUser?.studentName || currentUser?.childName || '');
-  const [editRollNo, setEditRollNo] = useState(currentUser?.studentRollNo || '');
-  const [editStopName, setEditStopName] = useState(currentUser?.stopName || 'Mayuri Junction / Balaji Nagar');
-  const [editBusId, setEditBusId] = useState(currentUser?.busId || 'BUS-24');
-  const [editSaving, setEditSaving] = useState(false);
-
-  const [now, setNow] = useState(() => Date.now());
-  const [focusTrigger, setFocusTrigger] = useState(0);
-  const [focusNotice, setFocusNotice] = useState(null);
-  const [isConnected, setIsConnected] = useState(true);
-
-  // Time ticker (4s) for relative time / freshness calculation
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 4000);
-    return () => clearInterval(timer);
+    if (currentUser?.uid || currentUser?.email) {
+      const unsubS = subscribeParentStudents(currentUser.uid, currentUser.email, (list) => {
+        setStudents(list);
+        if (list.length > 0 && !selectedStudentId) {
+          setSelectedStudentId(list[0].id);
+        }
+      });
+      return () => unsubS();
+    }
+  }, [currentUser, selectedStudentId]);
+
+  const activeStudent = useMemo(() => {
+    return students.find(s => s.id === selectedStudentId) || students[0] || null;
+  }, [students, selectedStudentId]);
+
+  // Discovery State (FROM -> TO -> FIND BUSES)
+  const [fromLocation, setFromLocation] = useState(() => activeStudent?.institutionName || currentUser?.institutionName || 'GITAM (Deemed to be University)');
+  const [toDestination, setToDestination] = useState(() => activeStudent?.stopName || currentUser?.stopName || 'MVP Colony');
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Sync with active student selection
+  useEffect(() => {
+    if (activeStudent) {
+      if (activeStudent.institutionName) setFromLocation(activeStudent.institutionName);
+      if (activeStudent.stopName) setToDestination(activeStudent.stopName);
+    }
+  }, [activeStudent]);
+
+  // Selected Journey View State
+  const [selectedBusId, setSelectedBusId] = useState(null);
+  const [selectedRouteId, setSelectedRouteId] = useState(null);
+  const [isLiveViewActive, setIsLiveViewActive] = useState(false);
+  const [mapFocusTrigger, setMapFocusTrigger] = useState(0);
+
+  // UI Panels
+  const [bottomTab, setBottomTab] = useState('live'); // 'live' | 'stops' | 'share'
+  const [showStopsModal, setShowStopsModal] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [institutionDropdownOpen, setInstitutionDropdownOpen] = useState(false);
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [incidentType, setIncidentType] = useState("Bus Delay / Stalled");
+  const [incidentDesc, setIncidentDesc] = useState('');
+  const [incidentSubmitted, setIncidentSubmitted] = useState(false);
+
+  // 1. Subscribe to authoritative Firestore collections
+  useEffect(() => {
+    const unsubRoutes = subscribeRoutes((routes) => setRoutesList(routes));
+    const unsubBuses = subscribeBuses((buses) => setFleetList(buses));
+    const unsubSchedules = subscribeSchedules((scheds) => setSchedulesList(scheds));
+    const unsubTrips = subscribeActiveTrips((trips) => setActiveTripsList(trips));
+
+    return () => {
+      unsubRoutes();
+      unsubBuses();
+      unsubSchedules();
+      unsubTrips();
+    };
   }, []);
 
-  // Firebase connection state
+  // 2. High-Frequency Realtime Database Telemetry for selected bus
   useEffect(() => {
-    const connRef = ref(rtdb, '.info/connected');
-    const unsubscribe = onValue(connRef, (snap) => {
-      setIsConnected(snap.val() === true);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (!selectedBusId) return;
 
-  // 1. Subscribe to Firestore Bus document
-  useEffect(() => {
-    if (!busId) return;
-    const unsubBus = subscribeSingleBus(busId, (val) => {
-      if (val) {
-        setBusData((prev) => ({
+    const unsubGps = subscribeLiveLocation(selectedBusId, (data) => {
+      if (data) {
+        setLiveLocations((prev) => ({
           ...prev,
-          ...val,
-          latitude: prev.isLiveStreaming ? prev.latitude : val.latitude || prev.latitude,
-          longitude: prev.isLiveStreaming ? prev.longitude : val.longitude || prev.longitude,
-          lastUpdated: prev.isLiveStreaming ? prev.lastUpdated : val.lastUpdated || prev.lastUpdated
-        }));
-      }
-    });
-    return () => unsubBus();
-  }, [busId]);
-
-  // 2. Subscribe to Firestore Route document
-  useEffect(() => {
-    if (!routeId) return;
-    const unsubRoute = subscribeSingleRoute(routeId, (val) => {
-      if (val) {
-        setRouteData(val);
-      }
-    });
-    return () => unsubRoute();
-  }, [routeId]);
-
-  // 3. Subscribe to Schedules collection for departure & arrival timings
-  useEffect(() => {
-    if (!busId && !routeId) return;
-    const unsubSched = subscribeSchedules((schedules) => {
-      const matched = schedules.find(s => (busId && s.busId === busId) || (routeId && s.routeId === routeId));
-      if (matched) {
-        setScheduleData(matched);
-      }
-    });
-    return () => unsubSched();
-  }, [busId, routeId]);
-
-  // 4. Subscribe to Realtime Database High-Frequency GPS (~4 seconds)
-  useEffect(() => {
-    const targetId = busData?.activeTripId || busId;
-    if (!targetId) return;
-
-    const unsubGps = subscribeLiveLocation(targetId, (livePos) => {
-      if (livePos && livePos.active) {
-        setBusData((prev) => ({
-          ...prev,
-          status: 'LIVE',
-          latitude: Number(livePos.latitude),
-          longitude: Number(livePos.longitude),
-          accuracy: Number(livePos.accuracy || 8),
-          speed: Number(livePos.speed || 0),
-          heading: Number(livePos.heading || 0),
-          lastUpdated: livePos.timestamp || Date.now(),
-          driverName: livePos.driverName || prev.driverName,
-          driverPhone: livePos.driverPhone || prev.driverPhone,
-          isLiveStreaming: true
-        }));
-      } else if (livePos && livePos.active === false) {
-        setBusData((prev) => ({
-          ...prev,
-          status: 'COMPLETED',
-          isLiveStreaming: false
+          [selectedBusId]: data
         }));
       }
     });
 
     return () => unsubGps();
-  }, [busData?.activeTripId, busId]);
+  }, [selectedBusId]);
 
-  const handleReportSubmit = async (e) => {
+  // Effective Collections (Authoritative Firestore with INITIAL fallback if unseeded)
+  const effectiveRoutes = useMemo(() => {
+    return routesList.length > 0 ? routesList : INITIAL_ROUTES;
+  }, [routesList]);
+
+  const effectiveFleet = useMemo(() => {
+    return fleetList.length > 0 ? fleetList : INITIAL_VEHICLES;
+  }, [fleetList]);
+
+  // Derived: Known Institutions from Registered List + Routes
+  const institutions = useMemo(() => {
+    const map = new Map();
+    REGISTERED_INSTITUTIONS.forEach((inst) => {
+      map.set(inst.name, {
+        id: inst.id,
+        name: inst.name,
+        shortName: inst.shortName,
+        district: inst.district
+      });
+    });
+    effectiveRoutes.forEach((r) => {
+      if (r.institutionName && !map.has(r.institutionName)) {
+        map.set(r.institutionName, {
+          id: r.institutionId || r.institutionName,
+          name: r.institutionName,
+          shortName: r.institutionName.split(' ')[0],
+          district: 'Corridor'
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [effectiveRoutes]);
+
+  // Derived: Available Destinations (Endpoints & Stops) served from the selected FROM
+  const availableDestinations = useMemo(() => {
+    if (!fromLocation) return [];
+
+    const set = new Set();
+    effectiveRoutes.forEach((r) => {
+      const rFrom = r.from || r.stops?.[0]?.name || '';
+      const isFromMatch =
+        rFrom.toLowerCase().includes(fromLocation.toLowerCase()) ||
+        fromLocation.toLowerCase().includes(rFrom.toLowerCase()) ||
+        (r.institutionName && r.institutionName.toLowerCase().includes(fromLocation.toLowerCase())) ||
+        (r.institutionId && r.institutionId.toLowerCase().includes(fromLocation.toLowerCase())) ||
+        (r.name && r.name.toLowerCase().includes(fromLocation.toLowerCase()));
+
+      if (isFromMatch) {
+        if (r.to) set.add(r.to);
+        if (r.stops && Array.isArray(r.stops)) {
+          r.stops.forEach((s) => {
+            if (s.name && !s.name.toLowerCase().includes(fromLocation.toLowerCase())) {
+              set.add(s.name);
+            }
+          });
+        }
+      }
+    });
+
+    // If specific matching didn't yield stops, show all unique corridor destinations
+    if (set.size === 0) {
+      effectiveRoutes.forEach((r) => {
+        if (r.to) set.add(r.to);
+        r.stops?.forEach((s) => s.name && set.add(s.name));
+      });
+    }
+
+    return Array.from(set);
+  }, [fromLocation, effectiveRoutes]);
+
+  // Default destination to first available if unselected
+  useEffect(() => {
+    if (availableDestinations.length > 0 && !toDestination) {
+      // Pick MVP Colony if available, otherwise first
+      const defaultTo = availableDestinations.find(d => d.includes('MVP Colony')) || availableDestinations[0];
+      setToDestination(defaultTo);
+    }
+  }, [availableDestinations, toDestination]);
+
+  // 3. Find Matching Routes & Resolve Real Buses
+  const matchedJourneyOptions = useMemo(() => {
+    if (!fromLocation || !toDestination) return [];
+
+    const matchingRoutes = findMatchingRoutes({
+      routes: effectiveRoutes,
+      from: fromLocation,
+      to: toDestination
+    });
+
+    return matchingRoutes.map((route) => {
+      return resolveBusJourneyDetails({
+        route,
+        buses: effectiveFleet,
+        schedules: schedulesList,
+        activeTrips: activeTripsList,
+        liveLocations
+      });
+    }).filter(Boolean);
+  }, [effectiveRoutes, effectiveFleet, schedulesList, activeTripsList, liveLocations, fromLocation, toDestination]);
+
+  // 4. Resolve the Active/Selected Journey Record
+  const activeJourney = useMemo(() => {
+    if (!selectedRouteId && matchedJourneyOptions.length > 0) {
+      return matchedJourneyOptions[0];
+    }
+    if (selectedRouteId) {
+      const match = matchedJourneyOptions.find(j => j.route?.id === selectedRouteId || j.busId === selectedBusId);
+      if (match) return match;
+      // Fallback lookup directly in routes
+      const rawRoute = effectiveRoutes.find(r => r.id === selectedRouteId);
+      if (rawRoute) {
+        return resolveBusJourneyDetails({
+          route: rawRoute,
+          buses: effectiveFleet,
+          schedules: schedulesList,
+          activeTrips: activeTripsList,
+          liveLocations
+        });
+      }
+    }
+    return matchedJourneyOptions[0] || null;
+  }, [selectedRouteId, selectedBusId, matchedJourneyOptions, effectiveRoutes, effectiveFleet, schedulesList, activeTripsList, liveLocations]);
+
+  // Select first available bus when search is initiated
+  const handleFindBuses = (e) => {
+    if (e) e.preventDefault();
+    setHasSearched(true);
+    if (matchedJourneyOptions.length > 0) {
+      const primary = matchedJourneyOptions[0];
+      setSelectedRouteId(primary.route?.id);
+      setSelectedBusId(primary.busId);
+    }
+  };
+
+  const handleSelectBus = (journey) => {
+    setSelectedRouteId(journey.route?.id);
+    setSelectedBusId(journey.busId);
+    navigate(`/parent/journey?busId=${journey.busId}&routeId=${journey.route?.id}&stop=${encodeURIComponent(toDestination)}`);
+  };
+
+  // Determine Stop Progression & Next Stop Index
+  const stops = activeJourney?.stops || [];
+  const totalStops = stops.length;
+  
+  // Real or derived next stop
+  const isTripLive = activeJourney?.state === 'LIVE';
+  const nextStopIndex = isTripLive ? Math.min(2, Math.max(1, totalStops - 2)) : 0;
+  const nextStop = stops[nextStopIndex] || null;
+  const etaMinutes = isTripLive ? 26 : 0;
+
+  // Handle Share action
+  const handleShare = async () => {
+    const shareUrl = window.location.href;
+    const shareData = {
+      title: 'Nishchit Live Bus Journey',
+      text: `Track bus journey: ${fromLocation} to ${toDestination}`,
+      url: shareUrl
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // Fallback to clipboard
+      }
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 3000);
+    }
+  };
+
+  // Handle incident reporting
+  const handleIncidentSubmit = async (e) => {
     e.preventDefault();
     try {
       await submitIncidentReport({
         parentId: currentUser?.uid || 'parent',
-        parentName: currentUser?.name || 'Parent',
-        studentName: currentUser?.studentName || currentUser?.childName || 'Student',
-        busId: busData.id || busId,
-        routeId: routeData?.id || routeId,
-        type: reportType,
-        description: reportDesc
+        parentName: currentUser?.fullName || currentUser?.name || 'Parent',
+        busId: activeJourney?.busId || 'BUS',
+        routeId: activeJourney?.route?.id || 'ROUTE',
+        type: incidentType,
+        description: incidentDesc
       });
-      setReportSubmitted(true);
+      setIncidentSubmitted(true);
       setTimeout(() => {
-        setReportSubmitted(false);
-        setShowReportModal(false);
-        setReportDesc('');
+        setIncidentSubmitted(false);
+        setShowIncidentModal(false);
+        setIncidentDesc('');
       }, 2000);
     } catch (err) {
-      console.error('Report submit error:', err);
+      console.error(err);
     }
   };
 
-  const handleSaveChildDetails = async (e) => {
-    e.preventDefault();
-    setEditSaving(true);
-    try {
-      const selectedBus = INITIAL_VEHICLES.find(b => b.id === editBusId) || INITIAL_VEHICLES[0];
-      await updateCurrentUserProfile({
-        studentName: editStudentName.trim(),
-        childName: editStudentName.trim(),
-        studentRollNo: editRollNo.trim(),
-        stopName: editStopName.trim(),
-        busId: selectedBus.id,
-        busNumber: selectedBus.busNumber,
-        busRegistrationNumber: selectedBus.registrationNumber,
-        routeId: selectedBus.routeId,
-        routeName: selectedBus.routeName
-      });
-      setShowEditChildModal(false);
-    } catch (err) {
-      console.error('Failed to update student profile:', err);
-    } finally {
-      setEditSaving(false);
-    }
-  };
+  // =========================================================================
+  // VIEW 1: HIGH-FIDELITY LIVE TRANSIT VIEW (MATCHING USER REFERENCE SCREEN)
+  // =========================================================================
+  if (isLiveViewActive && activeJourney) {
+    const liveBusTelemetry = liveLocations[activeJourney.busId] || activeJourney.bus || {};
+    const effectiveLat = liveBusTelemetry.latitude ?? liveBusTelemetry.lat;
+    const effectiveLng = liveBusTelemetry.longitude ?? liveBusTelemetry.lng;
+    const hasLiveCoords = isValidCoordinate(effectiveLat, effectiveLng);
 
-  const statusInfo = getParentStatusInfo(busData, now);
-
-  const handleFocusBus = () => {
-    if (statusInfo.status === 'NOT_STARTED') {
-      setFocusNotice("Bus has not departed depot / terminal yet.");
-      setTimeout(() => setFocusNotice(null), 3000);
-    } else {
-      setFocusNotice('Centering on live bus location...');
-      setTimeout(() => setFocusNotice(null), 2500);
-    }
-    setFocusTrigger((prev) => prev + 1);
-  };
-
-  const activeStops = routeData?.stops?.length ? routeData.stops : (INITIAL_ROUTES.find((r) => r.id === routeId)?.stops || []);
-  const activeRouteName = routeData?.routeName || routeData?.name || busData?.routeName || 'Vizianagaram Corridor Route';
-  
-  // Timing derivations
-  const scheduledDeparture = scheduleData?.departureTime || routeData?.departureTime || '07:15 AM';
-  const expectedArrival = scheduleData?.expectedArrival || routeData?.expectedArrival || '08:20 AM';
-  const tripStartedTime = busData?.startedAt 
-    ? new Date(busData.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-    : (statusInfo.status === 'LIVE' ? 'In progress' : 'Not started');
-
-  function renderEditChildModal() {
     return (
-      <div className="modal-overlay">
-        <div className="modal-content" style={{ maxWidth: '480px' }}>
-          <div className="modal-header">
-            <h3>Student Transport Settings</h3>
-            <button onClick={() => setShowEditChildModal(false)} className="drawer-close-btn">
-              <X size={18} />
+      <div className="transit-view-wrapper">
+        {/* 1. FLOATING TOP HEADER */}
+        <header className="transit-floating-header">
+          <div className="transit-header-left">
+            {/* Rounded Golden-Yellow Bus Badge */}
+            <div className="transit-bus-badge">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="4" width="18" height="15" rx="3" fill="#0F172A" />
+                <rect x="5" y="6" width="14" height="6" rx="1.5" fill="#38BDF8" opacity="0.9" />
+                <circle cx="7" cy="15" r="1.5" fill="#FEF08A" />
+                <circle cx="17" cy="15" r="1.5" fill="#FEF08A" />
+                <rect x="10" y="14" width="4" height="2" rx="0.5" fill="#64748B" />
+                <rect x="2" y="8" width="1.5" height="4" rx="0.5" fill="#0F172A" />
+                <rect x="20.5" y="8" width="1.5" height="4" rx="0.5" fill="#0F172A" />
+              </svg>
+            </div>
+
+            {/* Institution Dropdown & Location Title */}
+            <div className="transit-title-block" onClick={() => setInstitutionDropdownOpen(!institutionDropdownOpen)}>
+              <div className="transit-title-row">
+                <span className="transit-institution-name">
+                  {fromLocation.split('(')[0].trim()}
+                </span>
+                <ChevronDown size={18} className={`transit-chevron ${institutionDropdownOpen ? 'open' : ''}`} />
+              </div>
+              <span className="transit-city-subtitle">Visakhapatnam</span>
+            </div>
+          </div>
+
+          <div className="transit-header-right">
+            <button
+              type="button"
+              className="transit-icon-btn"
+              onClick={() => setShowIncidentModal(true)}
+              aria-label="Report incident"
+              title="Report incident / delay"
+            >
+              <Bell size={20} color="#334155" />
+              <span className="notification-red-dot" />
+            </button>
+
+            <button
+              type="button"
+              className="transit-avatar-btn"
+              onClick={() => setIsLiveViewActive(false)}
+              aria-label="Parent Profile"
+              title="Journey Search"
+            >
+              <User size={19} color="#FFFFFF" />
             </button>
           </div>
 
-          <form onSubmit={handleSaveChildDetails} className="report-form" style={{ marginTop: '14px' }}>
-            <div className="form-group">
-              <label>Student Full Name</label>
-              <input
-                type="text"
-                required
-                value={editStudentName}
-                onChange={(e) => setEditStudentName(e.target.value)}
-                placeholder="e.g. Aarav Varma"
+          {/* Institution Switcher Menu */}
+          {institutionDropdownOpen && (
+            <div className="transit-dropdown-menu">
+              <div className="dropdown-menu-header">Select Campus</div>
+              {institutions.map((inst) => (
+                <button
+                  key={inst.id}
+                  type="button"
+                  className={`dropdown-menu-item ${fromLocation === inst.name ? 'active' : ''}`}
+                  onClick={() => {
+                    setFromLocation(inst.name);
+                    setInstitutionDropdownOpen(false);
+                  }}
+                >
+                  <strong>{inst.name}</strong>
+                  <span>{inst.district}</span>
+                </button>
+              ))}
+              <div className="dropdown-menu-footer" onClick={() => setIsLiveViewActive(false)}>
+                ← Back to Journey Search
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* 2. FULL-SCREEN INTERACTIVE MAP CANVAS */}
+        <div className="transit-map-canvas">
+          <BusMap
+            busData={{
+              ...activeJourney.bus,
+              ...liveBusTelemetry,
+              busNumber: activeJourney.busNumber,
+              status: activeJourney.state
+            }}
+            stops={stops}
+            isLive={activeJourney.state === 'LIVE'}
+            busNumber={activeJourney.busNumber}
+            nextStopName={nextStop?.name}
+            nextStopMinutes={8}
+            onBack={() => setIsLiveViewActive(false)}
+            onRecenter={() => setMapFocusTrigger(prev => prev + 1)}
+            focusTrigger={mapFocusTrigger}
+          />
+        </div>
+
+        {/* 3. FLOATING BOTTOM SHEET DRAWER */}
+        <div className="transit-bottom-sheet">
+          {/* Drag Pill Grabber */}
+          <div className="bottom-sheet-grabber" />
+
+          {/* Header Row: Status Title & Arriving In Pill */}
+          <div className="sheet-header-row">
+            <div className="sheet-title-col">
+              <h2 className="sheet-main-title">
+                {activeJourney.state === 'LIVE'
+                  ? 'Bus is on the way'
+                  : activeJourney.state === 'COMPLETED'
+                  ? 'Trip is completed'
+                  : 'Bus is scheduled'}
+              </h2>
+              <p className="sheet-route-subtitle">
+                From {fromLocation.split('(')[0].trim()} to {toDestination}
+              </p>
+            </div>
+
+            {/* Light Green Arriving Box */}
+            <div className="sheet-eta-box">
+              <div className="eta-icon-clock">
+                <Clock size={20} color="#16A34A" />
+              </div>
+              <div className="eta-text-group">
+                <span className="eta-label">
+                  {activeJourney.state === 'LIVE' ? 'Arriving in' : 'Scheduled'}
+                </span>
+                <strong className="eta-value">
+                  {activeJourney.state === 'LIVE'
+                    ? `${etaMinutes} min`
+                    : activeJourney.departureTime}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. HORIZONTAL 5-STOP PROGRESS STEPPER */}
+          <div className="horizontal-stepper-container">
+            <div className="stepper-track-line">
+              <div
+                className="stepper-progress-fill"
+                style={{
+                  width: activeJourney.state === 'COMPLETED'
+                    ? '100%'
+                    : activeJourney.state === 'LIVE'
+                    ? '50%'
+                    : '0%'
+                }}
               />
             </div>
 
-            <div className="form-group">
-              <label>Student Roll / ID Number</label>
-              <input
-                type="text"
-                required
-                value={editRollNo}
-                onChange={(e) => setEditRollNo(e.target.value)}
-                placeholder="e.g. 22331A0589"
-              />
-            </div>
+            <div className="stepper-stops-row">
+              {stops.map((stop, idx) => {
+                const isOrigin = idx === 0;
+                const isDest = idx === totalStops - 1;
+                const isPassed = isTripLive && idx < nextStopIndex;
+                const isNext = isTripLive && idx === nextStopIndex;
+                const isFuture = idx > nextStopIndex;
 
-            <div className="form-group">
-              <label>Boarding / Drop-off Stop</label>
-              <input
-                type="text"
-                required
-                value={editStopName}
-                onChange={(e) => setEditStopName(e.target.value)}
-                placeholder="e.g. Mayuri Junction / Balaji Nagar"
-              />
-            </div>
+                return (
+                  <div
+                    key={`step-${idx}-${stop.name}`}
+                    className={`stepper-node ${isPassed ? 'passed' : ''} ${isNext ? 'next' : ''} ${isDest ? 'dest' : ''}`}
+                  >
+                    {/* Icon Node */}
+                    <div className="node-icon-circle">
+                      {isOrigin ? (
+                        <span className="node-grad-cap">🎓</span>
+                      ) : isDest ? (
+                        <span className="node-home-icon">🏠</span>
+                      ) : isPassed ? (
+                        <span className="node-check-icon">✓</span>
+                      ) : isNext ? (
+                        <span className="node-next-ring" />
+                      ) : (
+                        <span className="node-future-dot" />
+                      )}
+                    </div>
 
-            <div className="form-group">
-              <label>Assigned Corridor Vehicle</label>
+                    {/* Labels */}
+                    <div className="node-label-group">
+                      <strong className="node-stop-name">{stop.name}</strong>
+                      <span className="node-stop-time">{stop.scheduledTime}</span>
+
+                      {/* Status Badges */}
+                      {isPassed && (
+                        <span className="node-badge-passed">
+                          <CheckCircle2 size={12} color="#16A34A" />
+                        </span>
+                      )}
+
+                      {isNext && (
+                        <span className="node-badge-next">
+                          Next Stop
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 5. BOTTOM ACTION TABS */}
+          <div className="sheet-action-tabs">
+            <button
+              type="button"
+              className={`sheet-tab-btn ${bottomTab === 'live' ? 'active' : ''}`}
+              onClick={() => {
+                setBottomTab('live');
+                setMapFocusTrigger(prev => prev + 1);
+              }}
+            >
+              <MapPin size={18} />
+              <span>Live Location</span>
+            </button>
+
+            <button
+              type="button"
+              className={`sheet-tab-btn ${bottomTab === 'stops' ? 'active' : ''}`}
+              onClick={() => {
+                setBottomTab('stops');
+                setShowStopsModal(true);
+              }}
+            >
+              <List size={18} />
+              <span>Route Stops</span>
+            </button>
+
+            <button
+              type="button"
+              className={`sheet-tab-btn ${bottomTab === 'share' ? 'active' : ''}`}
+              onClick={handleShare}
+            >
+              <Share2 size={18} />
+              <span>{shareCopied ? 'Link Copied!' : 'Share'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Full Route Stops Modal */}
+        {showStopsModal && (
+          <div className="modal-overlay" onClick={() => setShowStopsModal(false)}>
+            <div className="modal-content stops-modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>{activeJourney.route?.name || 'Corridor Route Stops'}</h3>
+                <button className="modal-close" onClick={() => setShowStopsModal(false)}><X size={18} /></button>
+              </div>
+              <div className="stops-timeline-list">
+                {stops.map((s, idx) => (
+                  <div key={idx} className="timeline-stop-item">
+                    <div className="timeline-indicator">
+                      <span className="timeline-dot" />
+                      {idx < stops.length - 1 && <span className="timeline-connector" />}
+                    </div>
+                    <div className="timeline-stop-details">
+                      <strong>{s.name}</strong>
+                      <span>Scheduled: {s.scheduledTime}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Incident Report Modal */}
+        {showIncidentModal && (
+          <div className="modal-overlay" onClick={() => setShowIncidentModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Report Transit Delay or Incident</h3>
+                <button className="modal-close" onClick={() => setShowIncidentModal(false)}><X size={18} /></button>
+              </div>
+              <form onSubmit={handleIncidentSubmit} className="report-form">
+                <div className="form-group">
+                  <label>Issue Type</label>
+                  <select value={incidentType} onChange={e => setIncidentType(e.target.value)}>
+                    <option>Bus Delay / Stalled</option>
+                    <option>Route Deviation</option>
+                    <option>Mechanical Breakdown</option>
+                    <option>Driver Conduct</option>
+                    <option>Other Operational Concern</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Description / Details</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="Provide details for the transport management desk..."
+                    value={incidentDesc}
+                    onChange={e => setIncidentDesc(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                  {incidentSubmitted ? 'Report Submitted to Transport Desk' : 'Submit Incident Report'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const selectedInstObj = REGISTERED_INSTITUTIONS.find(i => i.name === fromLocation || i.id === fromLocation);
+  const isComingSoon = selectedInstObj?.status === 'COMING_SOON';
+
+  return (
+    <ParentShell activeTab="home" onTabChange={() => {}}>
+      <div className="parent-discovery-page">
+        {/* Child switcher bar if multiple children */}
+        {students.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', background: '#F8FAFC', padding: '10px 16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.84rem', color: '#64748B', fontWeight: 600 }}>Active Child:</span>
               <select
-                value={editBusId}
-                onChange={(e) => setEditBusId(e.target.value)}
+                value={selectedStudentId || ''}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontWeight: 700, fontSize: '0.88rem', color: '#0F172A', background: '#FFFFFF' }}
               >
-                {INITIAL_VEHICLES.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.busNumber} — {v.registrationNumber} ({v.routeName.split('(')[0].trim()})
-                  </option>
+                {students.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.rollNo}) · {s.stopName}</option>
                 ))}
               </select>
             </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <Button type="button" variant="outline" fullWidth onClick={() => setShowEditChildModal(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" fullWidth loading={editSaving}>
-                Save Details
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // STATE 1: NO ASSOCIATED CHILD LINKED
-  // =========================================================================
-  if (!studentName) {
-    return (
-      <div className="parent-dashboard-page">
-        <div className="dashboard-container" style={{ maxWidth: '640px', margin: '40px auto', textAlign: 'center' }}>
-          <div className="student-certainty-card" style={{ padding: '40px 24px' }}>
-            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <UserCheck size={32} color="#2563eb" />
-            </div>
-            <h2 style={{ fontSize: '1.4rem', color: '#0f172a', marginBottom: '8px' }}>Link Your Student to Begin Tracking</h2>
-            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, marginBottom: '24px' }}>
-              Associate your account with your child's institution and school bus to view real device GPS tracking.
-            </p>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => setShowEditChildModal(true)}
-              icon={Edit3}
-            >
-              Configure Student Transport
-            </Button>
-          </div>
-        </div>
-
-        {showEditChildModal && renderEditChildModal()}
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // STATE 2: NO BUS ASSIGNED YET
-  // =========================================================================
-  if (!busId || busId === 'unassigned') {
-    return (
-      <div className="parent-dashboard-page">
-        <div className="dashboard-container" style={{ maxWidth: '640px', margin: '40px auto', textAlign: 'center' }}>
-          <div className="student-certainty-card" style={{ padding: '40px 24px' }}>
-            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <Bus size={32} color="#d97706" />
-            </div>
-            <h2 style={{ fontSize: '1.35rem', color: '#0f172a', marginBottom: '8px' }}>No Bus Assigned to Your Child Yet</h2>
-            <p style={{ color: '#64748b', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '20px' }}>
-              {studentName} ({currentUser?.studentRollNo || 'Enrolled'}) is registered, but the transport office has not assigned a route vehicle yet.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setShowEditChildModal(true)}
-                icon={Edit3}
-              >
-                Change Assignment
-              </Button>
-              <a href="tel:+918922241732" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                <Phone size={15} /> Call Transport Desk
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {showEditChildModal && renderEditChildModal()}
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // STATE 3: FULL OPERATIONAL PARENT TRACKING PORTAL
-  // =========================================================================
-  return (
-    <div className="parent-dashboard-page">
-      <div className="dashboard-container">
-
-        {/* 1. STUDENT & VEHICLE CERTAINTY BANNER */}
-        <div className="student-certainty-card">
-          <div className="student-info-row" style={{ justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div className="student-avatar-badge">
-                <UserCheck size={24} color="#2563eb" />
-              </div>
-              <div className="student-details">
-                <div className="student-name-row">
-                  <h2>{studentName}</h2>
-                  <span className="roll-badge">{currentUser?.studentRollNo || 'Enrolled'}</span>
-                </div>
-                <p className="inst-subhead">
-                  <Building2 size={14} className="icon-inline" />
-                  {currentUser?.institutionName || 'MVGR College of Engineering (Autonomous), Vizianagaram'}
-                </p>
-              </div>
-            </div>
-
             <button
-              onClick={() => setShowEditChildModal(true)}
-              className="btn btn-outline"
-              style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="Edit student and bus assignment"
+              onClick={() => navigate('/parent/profile')}
+              style={{ background: 'transparent', border: 'none', fontSize: '0.82rem', color: '#2563EB', fontWeight: 700, cursor: 'pointer' }}
             >
-              <Edit3 size={14} /> Update Details
+              Manage Children →
             </button>
           </div>
+        )}
 
-          <div className="assigned-transport-grid">
-            <div className="trans-box">
-              <span className="trans-label">Assigned Vehicle</span>
-              <strong>{busData?.busNumber || 'Bus 24'}</strong>
-              <code>{busData?.registrationNumber || 'AP 35 U 2424'}</code>
-            </div>
-
-            <div className="trans-box">
-              <span className="trans-label">Assigned Route</span>
-              <strong>{routeData?.code || busData?.routeNumber || 'Route 04'}</strong>
-              <span className="stop-name-tag">Pickup Stop: {currentUser?.stopName || 'Mayuri Junction'}</span>
-            </div>
-
-            <div className="trans-box">
-              <span className="trans-label">Authorized Driver</span>
-              <strong>{busData?.driverName || 'Assigned Operator'}</strong>
-              {busData?.driverPhone ? (
-                <a href={`tel:${busData.driverPhone}`} className="driver-phone-link" title="Call Driver">
-                  <Phone size={12} /> {busData.driverPhone}
-                </a>
-              ) : (
-                <span className="driver-phone-link"><Phone size={12} /> Contact Desk</span>
-              )}
-            </div>
-          </div>
+        <div className="discovery-header-banner">
+          <h1>Find Your Bus Journey</h1>
+          <p>Select your campus and destination to discover live and scheduled corridor buses.</p>
         </div>
 
-        {/* 2. REAL-TIME TRIP STATUS BAR (Calm, Trustworthy Hierarchy) */}
-        <div className={`parent-trip-status-card status-${statusInfo.status.toLowerCase()}`}>
-          <div className="status-main-col">
-            <div className="status-header-line">
-              <span className={`status-pill ${statusInfo.status.toLowerCase()}`}>
-                {statusInfo.status === 'LIVE' && <span className="pulse-dot-green"></span>}
-                {statusInfo.title}
-              </span>
-              {!isConnected && <span className="offline-pill">• Syncing</span>}
-            </div>
-            <p className="status-desc-text">{statusInfo.subtitle}</p>
-          </div>
-
-          <div className="status-telemetry-col">
-            {statusInfo.status === 'LIVE' && (
-              <div className="telem-badge">
-                <Radio size={14} color="#16a34a" />
-                <span>Live GPS Feed Active</span>
-              </div>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleFocusBus}
-              icon={Navigation}
-            >
-              Center on Bus
-            </Button>
-          </div>
-        </div>
-
-        {/* 3. CENTERPIECE GOOGLE MAP */}
-        <div className="parent-map-section">
-          <div className="map-toolbar">
-            <div className="map-toolbar-info">
-              <MapPin size={16} color="#2563eb" />
-              <span>
-                {statusInfo.status === 'LIVE' 
-                  ? 'Real-Time Driver Device GPS Location' 
-                  : statusInfo.status === 'COMPLETED' 
-                  ? 'Trip Concluded — Final Vehicle Position' 
-                  : statusInfo.status === 'STALE'
-                  ? 'Last Known Position (Location Stale)'
-                  : 'Bus Parked at Starting Platform / Depot'}
-              </span>
+        {/* JOURNEY SEARCH INPUT CARD (FROM -> TO) */}
+        <div className="journey-search-card">
+          <form onSubmit={handleFindBuses} className="journey-search-form">
+            <div className="journey-field-group">
+              <label className="journey-label">
+                <span className="field-dot from-dot" /> FROM (Campus / Origin)
+              </label>
+              <select
+                value={fromLocation}
+                onChange={(e) => setFromLocation(e.target.value)}
+                className="journey-select"
+              >
+                {institutions.map((inst) => {
+                  const reg = REGISTERED_INSTITUTIONS.find(r => r.name === inst.name || r.id === inst.id);
+                  const isComing = reg?.status === 'COMING_SOON';
+                  return (
+                    <option key={inst.id} value={inst.name}>
+                      {inst.name} {isComing ? '· (Coming Soon)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
-            {focusNotice && (
-              <span className="map-focus-notice">{focusNotice}</span>
-            )}
-          </div>
-
-          <div className="map-frame" style={{ height: '420px', borderRadius: '12px', overflow: 'hidden' }}>
-            <BusMap busData={busData} focusTrigger={focusTrigger} />
-          </div>
-
-          {/* Schedule & Timing Strip (Section 28) */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
-            gap: '12px', 
-            background: '#ffffff', 
-            padding: '14px 18px', 
-            borderRadius: '10px', 
-            marginTop: '12px', 
-            border: '1px solid #e2e8f0',
-            fontSize: '0.82rem'
-          }}>
-            <div>
-              <span style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Scheduled Departure</span>
-              <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>{scheduledDeparture}</div>
+            <div className="journey-swap-divider">
+              <span className="arrow-flow">↓</span>
             </div>
-            <div>
-              <span style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Trip Started</span>
-              <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>{tripStartedTime}</div>
+
+            <div className="journey-field-group">
+              <label className="journey-label">
+                <span className="field-dot to-dot" /> TO (Destination / Drop Stop)
+              </label>
+              <select
+                value={toDestination}
+                onChange={(e) => setToDestination(e.target.value)}
+                className="journey-select"
+                disabled={isComingSoon}
+              >
+                {availableDestinations.length === 0 ? (
+                  <option value="">No destinations available for this origin</option>
+                ) : (
+                  availableDestinations.map((dest, idx) => (
+                    <option key={idx} value={dest}>
+                      {dest}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
-            <div>
-              <span style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Expected Campus Arrival</span>
-              <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>{expectedArrival}</div>
+
+            <button type="submit" className="btn-find-buses" disabled={isComingSoon}>
+              <Search size={18} />
+              <span>{isComingSoon ? 'Unavailable' : 'Find Buses'}</span>
+            </button>
+          </form>
+
+          {/* Coming Soon Guard Warning */}
+          {isComingSoon && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 16px', color: '#B45309', fontSize: '0.86rem', marginTop: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0 }} />
+              <span><strong>Coming soon:</strong> Transport services for {selectedInstObj?.name || fromLocation} are not currently active through Nishchit. Active journeys cannot be created for this campus yet.</span>
             </div>
-            <div>
-              <span style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Boarding Stop</span>
-              <div style={{ fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>{currentUser?.stopName || 'Mayuri Junction'}</div>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '0.76rem', color: '#94a3b8', textAlign: 'center', margin: '8px 0 0' }}>
-            Location is shared from the driver's device. No simulated GPS or invented arrival times.
-          </p>
-        </div>
-
-        {/* 4. ROUTE STOPS PROGRESSION */}
-        <div className="route-schedule-card">
-          <div className="route-card-header">
-            <div>
-              <h3>Route Stops & Scheduled Timings</h3>
-              <p className="subtext">{activeRouteName}</p>
-            </div>
-            <span className="route-badge-outline">{routeData?.code || 'ROUTE'}</span>
-          </div>
-
-          <div className="stops-timeline">
-            {activeStops.map((stop, idx) => {
-              const isStudentStop = stop.name.toLowerCase().includes((currentUser?.stopName || 'mayuri').toLowerCase());
-              return (
-                <div key={idx} className={`timeline-stop-item ${isStudentStop ? 'student-pickup' : ''}`}>
-                  <div className="stop-dot-indicator">
-                    {isStudentStop ? <UserCheck size={14} color="#fff" /> : <span>{idx + 1}</span>}
-                  </div>
-                  <div className="stop-content">
-                    <div className="stop-name-row">
-                      <strong className="stop-name">{stop.name}</strong>
-                      {isStudentStop && <span className="your-stop-badge">Your Child's Pickup Stop</span>}
-                    </div>
-                    <span className="stop-time">
-                      <Clock size={12} /> Scheduled: {stop.scheduledTime}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 5. DRIVER DISPATCH, NOTICES & EMERGENCY ACTIONS */}
-        <div className="parent-actions-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '16px' }}>
-          <Button
-            variant="outline"
-            onClick={() => setShowCommPanel(!showCommPanel)}
-            icon={MessageSquare}
-          >
-            {showCommPanel ? 'Hide Driver Announcements' : 'View Driver Announcements & Notices'}
-          </Button>
-
-          {busData?.driverPhone && (
-            <a 
-              href={`tel:${busData.driverPhone}`} 
-              className="btn btn-outline" 
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-              title="Call driver directly"
-            >
-              <Phone size={15} color="#16a34a" /> Call Driver
-            </a>
           )}
-
-          <a 
-            href="tel:+918922241732" 
-            className="btn btn-outline" 
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-            title="Call Institution Transport Desk"
-          >
-            <ShieldCheck size={15} color="#2563eb" /> Institution Transport Desk
-          </a>
-
-          <Button
-            variant="ghost"
-            onClick={() => setShowReportModal(true)}
-            icon={AlertCircle}
-          >
-            Report Issue to Transport Desk
-          </Button>
         </div>
 
-        {/* Communication Drawer */}
-        {showCommPanel && (
-          <div className="comm-panel-container" style={{ marginTop: '14px' }}>
-            <CommunicationPanel
-              currentUser={currentUser}
-              busData={busData}
-              onClose={() => setShowCommPanel(false)}
-            />
-          </div>
-        )}
-
-        {/* Report Issue Modal */}
-        {showReportModal && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h3>Report Transport Issue</h3>
-                <button onClick={() => setShowReportModal(false)} className="drawer-close-btn">
-                  <X size={18} />
-                </button>
-              </div>
-
-              {reportSubmitted ? (
-                <div className="report-success-box">
-                  <CheckCircle2 size={36} color="#16a34a" />
-                  <h4>Incident Logged Successfully</h4>
-                  <p>Your report has been forwarded to the Institution Transport Management Control Room.</p>
-                </div>
-              ) : (
-                <form onSubmit={handleReportSubmit} className="report-form">
-                  <div className="form-group">
-                    <label>Issue Type</label>
-                    <select
-                      value={reportType}
-                      onChange={(e) => setReportType(e.target.value)}
-                    >
-                      <option value="Bus hasn't moved / Delay">Bus hasn't moved / Heavy delay</option>
-                      <option value="Missed stop / Route discrepancy">Missed stop / Route discrepancy</option>
-                      <option value="Driver communication issue">Driver communication issue</option>
-                      <option value="Vehicle breakdown reported">Vehicle breakdown / Tyre issue</option>
-                      <option value="Emergency Safety Notice">Emergency safety concern</option>
-                      <option value="Other Issue">Other transport feedback</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Details & Specific Location</label>
-                    <textarea
-                      rows={3}
-                      required
-                      placeholder="Provide specific observations or queries for the transport officer..."
-                      value={reportDesc}
-                      onChange={(e) => setReportDesc(e.target.value)}
-                    />
-                  </div>
-
-                  <Button type="submit" variant="primary" fullWidth>
-                    Submit Issue to Transport Desk
-                  </Button>
-                </form>
-              )}
+        {/* RESULTS: BUSES SERVING YOUR JOURNEY */}
+        <div className="available-buses-section">
+          <div className="buses-section-header">
+            <div>
+              <h2>Buses serving your journey</h2>
+              <span className="journey-path-breadcrumb">
+                {fromLocation.split('(')[0].trim()} <ArrowRight size={14} style={{ display: 'inline' }} /> {toDestination}
+              </span>
             </div>
+            <span className="buses-count-badge">
+              {matchedJourneyOptions.length} {matchedJourneyOptions.length === 1 ? 'Bus' : 'Buses'} Available
+            </span>
           </div>
-        )}
 
-        {/* Edit Child Settings Modal */}
-        {showEditChildModal && renderEditChildModal()}
+          {/* EMPTY STATES */}
+          {matchedJourneyOptions.length === 0 ? (
+            <div className="journey-empty-state">
+              <Bus size={36} color="#94A3B8" />
+              <h3>No buses currently serve this journey</h3>
+              <p>Try selecting a different destination stop or check corridor schedule allocations.</p>
+            </div>
+          ) : (
+            <div className="available-buses-grid">
+              {matchedJourneyOptions.map((journey) => {
+                const isLive = journey.state === 'LIVE';
+                const isCompleted = journey.state === 'COMPLETED';
 
+                return (
+                  <div
+                    key={journey.busId || journey.route?.id}
+                    className={`bus-card-item ${isLive ? 'is-live' : ''}`}
+                    onClick={() => handleSelectBus(journey)}
+                  >
+                    <div className="bus-card-top">
+                      <div className="bus-title-group">
+                        <div className="bus-icon-circle">
+                          <Bus size={20} color="#1D4ED8" />
+                        </div>
+                        <div>
+                          <h3 className="bus-card-number">{journey.busNumber}</h3>
+                          <span className="bus-reg-number">{journey.registrationNumber || 'Corridor Fleet'}</span>
+                        </div>
+                      </div>
+
+                      {/* State Badge */}
+                      <span className={`bus-state-pill ${journey.state.toLowerCase()}`}>
+                        {isLive ? (
+                          <>
+                            <span className="live-pulse-dot" /> LIVE
+                          </>
+                        ) : isCompleted ? (
+                          'COMPLETED'
+                        ) : (
+                          'SCHEDULED'
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="bus-route-summary">
+                      <MapPin size={14} color="#64748B" />
+                      <span>{journey.route?.name || `${fromLocation} → ${toDestination}`}</span>
+                    </div>
+
+                    <div className="bus-meta-row">
+                      <div className="meta-item">
+                        <Clock size={14} color="#64748B" />
+                        <span>Departure: <strong>{journey.departureTime}</strong></span>
+                      </div>
+                      {isLive && (
+                        <div className="meta-item green">
+                          <Radio size={14} color="#16A34A" />
+                          <span>Next: <strong>{journey.stops?.[1]?.name || 'On Route'}</strong></span>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-track-bus"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectBus(journey);
+                      }}
+                    >
+                      <span>Track Live Journey</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ParentShell>
   );
 }

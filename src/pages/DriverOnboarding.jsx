@@ -122,7 +122,7 @@ export default function DriverOnboarding() {
   };
 
   return (
-    <div className="onboarding-page">
+    <div className="onboarding-page nishchit-pattern-bg">
       <div className="onboarding-container">
         
         {/* Wizard Progress Bar */}
@@ -617,8 +617,8 @@ export default function DriverOnboarding() {
           </div>
         )}
 
+        </div>
       </div>
-    </div>
   );
 }
 

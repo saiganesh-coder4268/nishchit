@@ -4,10 +4,10 @@ import { ShieldCheck, ShieldAlert, Clock, Bus, Building2 } from 'lucide-react';
 export default function DriverVerificationCard({ driver, busInfo }) {
   if (!driver) return null;
 
-  const status = driver.verificationStatus || (driver.uid === 'demo-driver-001' ? 'VERIFIED' : 'PENDING');
-  const isVerified = status === 'VERIFIED';
-  const isPending = status === 'PENDING';
-  const isRejected = status === 'REJECTED';
+  const status = driver.verificationStatus || driver.status || 'PENDING';
+  const isVerified = status === 'VERIFIED' || status === 'approved';
+  const isPending = status === 'PENDING' || status === 'pending';
+  const isRejected = status === 'REJECTED' || status === 'rejected';
   const hasAssignedBus = Boolean(driver.busId);
 
   return (
@@ -38,7 +38,7 @@ export default function DriverVerificationCard({ driver, busInfo }) {
       <div className="verification-details-grid">
         <div className="detail-item">
           <span className="label">Driver Name</span>
-          <span className="value font-bold">{driver.name || 'Rajesh Kumar'}</span>
+          <span className="value font-bold">{driver.name || driver.fullName || 'Authorized Driver'}</span>
         </div>
 
         <div className="detail-item">

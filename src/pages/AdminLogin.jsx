@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, AlertCircle, Lock } from 'lucide-react';
+import NishchitLogo from '../components/NishchitLogo';
+import PostLoginTransition from '../components/PostLoginTransition';
+import { Building2, AlertCircle, ArrowLeft } from 'lucide-react';
 
-/**
- * TEMPORARY HACKATHON ADMIN ACCESS
- * NOT FOR PRODUCTION
- * 
- * Hackathon credentials:
- * ID: admin123
- * PASSWORD: admin123
- * 
- * Public registration is disabled to enforce role isolation.
- */
 export default function AdminLogin() {
   const { currentUser, loginAsAdminHackathon } = useAuth();
   const navigate = useNavigate();
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !showSuccess) {
       if (currentUser.role === 'admin') {
         navigate('/admin/dashboard', { replace: true });
       } else if (currentUser.role === 'driver') {
@@ -27,7 +20,7 @@ export default function AdminLogin() {
         navigate('/parent/dashboard', { replace: true });
       }
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, showSuccess]);
 
   const [adminId, setAdminId] = useState('');
   const [password, setPassword] = useState('');
@@ -49,86 +42,86 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
-      // TEMPORARY HACKATHON ADMIN ACCESS - NOT FOR PRODUCTION
       await loginAsAdminHackathon(cleanId, cleanPass);
-      navigate('/admin/dashboard');
+      setShowSuccess(true);
     } catch (err) {
-      setError(err?.message || 'Incorrect admin ID or password.');
+      setError('Incorrect administrator ID or password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (showSuccess) {
+    return <PostLoginTransition onFinish={() => navigate('/admin/dashboard', { replace: true })} />;
+  }
+
   return (
-    <div className="auth-page">
-      <div className="auth-container">
+    <div className="auth-card">
+      {/* Brand Header */}
+      <div className="auth-card-top">
+        <NishchitLogo variant="card" size={46} />
         
-        <div className="portal-badge-banner admin">
-          <ShieldCheck size={18} />
-          <span>TRANSPORT CONTROLLER &amp; ADMIN DESK</span>
+        <div className="auth-role-pill admin">
+          <Building2 size={14} />
+          <span>Transport Admin</span>
         </div>
 
-        <div className="auth-header">
-          <h1>Transport Authority Sign In</h1>
-          <p>Corridor Fleet Control, Driver Approvals &amp; Route Scheduling</p>
-        </div>
-
-        {error && (
-          <div className="auth-error-banner">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="form-group">
-            <label>Administrator ID</label>
-            <input
-              type="text"
-              required
-              autoFocus
-              placeholder="e.g. admin123"
-              value={adminId}
-              onChange={(e) => setAdminId(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary btn-full"
-            style={{ height: '46px', fontSize: '1rem', fontWeight: 600 }}
-          >
-            {loading ? 'Verifying Controller Credentials...' : 'Sign In to Transport Desk'}
-          </button>
-        </form>
-
-        <div className="auth-footer-notice" style={{ marginTop: '20px', padding: '12px 16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '0.82rem' }}>
-          <Lock size={14} color="#64748B" />
-          <span>Authorized institution and corridor transport personnel only. Public registration is restricted.</span>
-        </div>
-
-        <div className="portal-switcher-footer">
-          <span>Looking for another portal?</span>
-          <div className="switcher-links">
-            <Link to="/parent/login">Parent Portal</Link>
-            <span>•</span>
-            <Link to="/driver/login">Driver Portal</Link>
-          </div>
-        </div>
-
+        <h1 className="auth-heading">Transport Admin</h1>
+        <p className="auth-subheading">Sign in to manage school &amp; college transport.</p>
       </div>
+
+      {error && (
+        <div className="auth-error-banner" role="alert">
+          <AlertCircle size={16} className="auth-error-icon" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="auth-form" noValidate>
+        <div className="auth-field-group">
+          <label htmlFor="adminId">Administrator ID</label>
+          <input
+            id="adminId"
+            type="text"
+            required
+            autoComplete="username"
+            placeholder="Enter admin ID"
+            value={adminId}
+            onChange={(e) => setAdminId(e.target.value)}
+            className="auth-input"
+            autoFocus
+          />
+        </div>
+
+        <div className="auth-field-group">
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="auth-input"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="auth-btn-primary"
+        >
+          {loading ? 'Verifying credentials...' : 'Sign in'}
+        </button>
+
+        <div className="auth-back-row">
+          <Link to="/" className="auth-back-link">
+            <ArrowLeft size={14} />
+            <span>Back to portal selection</span>
+          </Link>
+        </div>
+      </form>
     </div>
   );
 }

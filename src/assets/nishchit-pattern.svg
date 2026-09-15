@@ -1,0 +1,47 @@
+<svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Motif 1: Bus Outline (x=24, y=24) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <rect x="20" y="24" width="34" height="22" rx="3.5" />
+    <rect x="24" y="28" width="11" height="7" rx="1.5" />
+    <rect x="39" y="28" width="11" height="7" rx="1.5" />
+    <circle cx="28" cy="46" r="3" />
+    <circle cx="46" cy="46" r="3" />
+    <line x1="30" y1="39" x2="44" y2="39" />
+  </g>
+
+  <!-- Motif 2: Location Waypoint (x=144, y=32) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <path d="M144 26C138.5 26 134 30.5 134 36C134 43.5 144 54 144 54C144 54 154 43.5 154 36C154 30.5 149.5 26 144 26Z" />
+    <circle cx="144" cy="36" r="3.5" />
+  </g>
+
+  <!-- Motif 3: Safety Shield (x=80, y=96) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <path d="M80 94L68 99V107C68 115 73.5 122.5 80 125C86.5 122.5 92 115 92 107V99L80 94Z" />
+    <path d="M76 109L79 112L85 106" />
+  </g>
+
+  <!-- Motif 4: Transit Route Nodes (x=176, y=106) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <circle cx="170" cy="116" r="3.5" />
+    <line x1="173.5" y1="116" x2="192.5" y2="104" stroke-dasharray="2 2" />
+    <circle cx="196" cy="102" r="3.5" />
+    <line x1="199.5" y1="102" x2="216.5" y2="114" stroke-dasharray="2 2" />
+    <circle cx="220" cy="116" r="3.5" />
+  </g>
+
+  <!-- Motif 5: Education Graduation Cap / School (x=36, y=164) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <polygon points="38,162 58,154 78,162 58,170" />
+    <path d="M46 167V177C46 182 58 185 58 185C58 185 70 182 70 177V167" />
+    <path d="M78 162V176" />
+    <circle cx="78" cy="177" r="1.5" />
+  </g>
+
+  <!-- Motif 6: Navigation Compass Arrow (x=144, y=172) -->
+  <g stroke="#1E293B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.055">
+    <circle cx="144" cy="176" r="14" />
+    <polygon points="144,166 148,176 144,174 140,176" fill="#1E293B" fill-opacity="0.055" />
+    <polygon points="144,186 148,176 144,178 140,176" />
+  </g>
+</svg>

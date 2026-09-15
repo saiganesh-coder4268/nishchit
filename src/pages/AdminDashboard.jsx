@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
+import AdminShell from '../components/shells/AdminShell';
 import {
   subscribeBuses,
   subscribeRoutes,
@@ -24,16 +26,41 @@ import {
 } from '../services/transportService';
 import {
   ShieldCheck, Bus, MapPin, Building2, AlertTriangle,
-  CheckCircle2, XCircle, Clock, Radio, Plus, UserCheck,
-  Phone, Check, Navigation, Trash2, Edit3, History, Calendar,
-  FileText, Eye, AlertCircle
+  CheckCircle2, XCircle, Radio, Plus, UserCheck,
+  Phone, Check, Trash2, Edit3, Calendar,
+  Eye, TrendingUp, Users
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { currentUser } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Navigation tabs: 'overview' | 'drivers' | 'buses' | 'routes' | 'schedules' | 'fleet' | 'incidents'
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Sync activeTab with URL pathname
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/admin/drivers')) setActiveTab('drivers');
+    else if (path.includes('/admin/vehicles') || path.includes('/admin/buses')) setActiveTab('buses');
+    else if (path.includes('/admin/routes')) setActiveTab('routes');
+    else if (path.includes('/admin/schedules')) setActiveTab('schedules');
+    else if (path.includes('/admin/trips') || path.includes('/admin/fleet')) setActiveTab('fleet');
+    else if (path.includes('/admin/incidents')) setActiveTab('incidents');
+    else if (path.includes('/admin/history')) setActiveTab('history');
+    else if (path.includes('/admin/profile')) setActiveTab('profile');
+    else setActiveTab('overview');
+  }, [location.pathname]);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'overview') navigate('/admin/dashboard');
+    else if (tab === 'buses') navigate('/admin/vehicles');
+    else if (tab === 'fleet') navigate('/admin/trips');
+    else navigate(`/admin/${tab}`);
+  };
+
   const [fleetList, setFleetList] = useState([]);
   const [routesList, setRoutesList] = useState([]);
   const [driverApps, setDriverApps] = useState([]);
@@ -169,9 +196,13 @@ export default function AdminDashboard() {
   // DRIVER VERIFICATION ACTIONS
   const handleApproveDriver = async () => {
     if (!reviewingDriver) return;
+    const bId = assignBusId || fleetList[0]?.id;
+    const rId = assignRouteId || routesList[0]?.id;
+    if (!bId || !rId) {
+      showFeedback('Please create or select a valid Bus and Route from the database to approve this driver.');
+      return;
+    }
     try {
-      const bId = assignBusId || fleetList[0]?.id || 'BUS-24';
-      const rId = assignRouteId || routesList[0]?.id || 'ROUTE-VZ04';
       await approveDriverApplication(
         reviewingDriver.applicationId || reviewingDriver.id,
         reviewingDriver.driverId || reviewingDriver.uid,
@@ -396,97 +427,72 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="admin-dashboard-page">
+    <AdminShell
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      pendingCount={pendingRequests.length}
+      activeTripsCount={activeBuses}
+    >
+      <div className="admin-dashboard-page">
 
-      {/* 1. TOP CONTROL ROOM HEADER */}
-      <div className="admin-header-bar">
-        <div className="admin-title-group">
-          <div className="admin-badge"><ShieldCheck size={20} /></div>
-          <div>
-            <h1>Transport Authority Control Room</h1>
-            <p>Vizianagaram – Thagarapuvalasa – Visakhapatnam Corridor Dispatch</p>
+        {actionNotice && (
+          <div className="admin-action-notice">
+            <CheckCircle2 size={18} color="#16a34a" />
+            <span>{actionNotice}</span>
           </div>
-        </div>
-
-        <div className="admin-profile-chip">
-          <div className="admin-avatar">AD</div>
-          <div>
-            <strong>{currentUser?.name || currentUser?.fullName || 'Transport Controller'}</strong>
-            <span>Chief Transport Officer</span>
-          </div>
-        </div>
-      </div>
-
-      {actionNotice && (
-        <div className="admin-action-notice">
-          <CheckCircle2 size={18} color="#16a34a" />
-          <span>{actionNotice}</span>
-        </div>
-      )}
+        )}
 
       {/* 2. STATS & OPERATIONAL METRICS */}
-      <div className="admin-metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
-        <div className="metric-card" onClick={() => setActiveTab('buses')}>
-          <div className="metric-icon blue"><Bus size={22} /></div>
+      <div className="admin-metrics-grid four-col-metrics">
+        <div className="metric-card" onClick={() => handleTabChange('buses')}>
+          <div className="metric-icon blue"><Bus size={22} color="#2563EB" /></div>
           <div className="metric-data">
             <span className="metric-number">{totalBuses}</span>
-            <span className="metric-label">Vehicles Registered</span>
+            <span className="metric-label">Total Buses</span>
+            <span className="metric-sub-pill green">{totalBuses > 0 ? 'Fleet Registered' : 'None Registered'}</span>
           </div>
         </div>
 
-        <div className="metric-card" onClick={() => setActiveTab('fleet')}>
-          <div className="metric-icon green"><Radio size={22} /></div>
+        <div className="metric-card" onClick={() => handleTabChange('fleet')}>
+          <div className="metric-icon green"><Radio size={22} color="#16A34A" /></div>
           <div className="metric-data">
-            <span className="metric-number">{activeBuses || activeTrips.length}</span>
-            <span className="metric-label">Active Buses on Trip</span>
+            <span className="metric-number">{activeBuses}</span>
+            <span className="metric-label">Active Trips</span>
+            <span className="metric-sub-pill green">{activeBuses > 0 ? 'Streaming Live GPS' : 'Standby'}</span>
           </div>
         </div>
 
-        <div className="metric-card" onClick={() => setActiveTab('drivers')}>
-          <div className="metric-icon amber"><UserCheck size={22} /></div>
-          <div className="metric-data">
-            <span className="metric-number">{pendingRequests.length}</span>
-            <span className="metric-label">Pending Driver Requests</span>
-          </div>
-        </div>
-
-        <div className="metric-card" onClick={() => setActiveTab('drivers')}>
-          <div className="metric-icon green"><CheckCircle2 size={22} /></div>
+        <div className="metric-card" onClick={() => handleTabChange('drivers')}>
+          <div className="metric-icon blue"><Users size={22} color="#2563EB" /></div>
           <div className="metric-data">
             <span className="metric-number">{verifiedDriversCount}</span>
             <span className="metric-label">Approved Drivers</span>
+            <span className="metric-sub-pill blue">{pendingRequests.length > 0 ? `${pendingRequests.length} pending review` : 'All reviewed'}</span>
           </div>
         </div>
 
-        <div className="metric-card" onClick={() => setActiveTab('schedules')}>
-          <div className="metric-icon blue"><Calendar size={22} /></div>
-          <div className="metric-data">
-            <span className="metric-number">{schedulesList.length}</span>
-            <span className="metric-label">Active Schedules</span>
-          </div>
-        </div>
-
-        <div className="metric-card" onClick={() => setActiveTab('routes')}>
-          <div className="metric-icon blue"><MapPin size={22} /></div>
+        <div className="metric-card" onClick={() => handleTabChange('routes')}>
+          <div className="metric-icon amber"><TrendingUp size={22} color="#D97706" /></div>
           <div className="metric-data">
             <span className="metric-number">{routesList.length}</span>
-            <span className="metric-label">Corridor Routes</span>
+            <span className="metric-label">Active Corridors</span>
+            <span className="metric-sub-pill green">{schedulesList.length > 0 ? `${schedulesList.length} schedules` : 'No schedules'}</span>
           </div>
         </div>
       </div>
 
-      {/* 3. NAVIGATION TABS (Requirement 10) */}
+      {/* 3. NAVIGATION TABS */}
       <div className="admin-nav-tabs">
         <button
           className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
+          onClick={() => handleTabChange('overview')}
         >
           <Building2 size={16} /> Overview
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'drivers' ? 'active' : ''}`}
-          onClick={() => setActiveTab('drivers')}
+          onClick={() => handleTabChange('drivers')}
         >
           <ShieldCheck size={16} /> Driver Requests
           {pendingRequests.length > 0 && <span className="tab-counter-badge">{pendingRequests.length}</span>}
@@ -494,28 +500,28 @@ export default function AdminDashboard() {
 
         <button
           className={`tab-btn ${activeTab === 'buses' ? 'active' : ''}`}
-          onClick={() => setActiveTab('buses')}
+          onClick={() => handleTabChange('buses')}
         >
           <Bus size={16} /> Vehicles ({fleetList.length})
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'routes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('routes')}
+          onClick={() => handleTabChange('routes')}
         >
           <MapPin size={16} /> Routes ({routesList.length})
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'schedules' ? 'active' : ''}`}
-          onClick={() => setActiveTab('schedules')}
+          onClick={() => handleTabChange('schedules')}
         >
           <Calendar size={16} /> Schedules ({schedulesList.length})
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'fleet' ? 'active' : ''}`}
-          onClick={() => setActiveTab('fleet')}
+          onClick={() => handleTabChange('fleet')}
         >
           <Radio size={16} /> Live Fleet
           {activeBuses > 0 && <span className="tab-counter-badge green">{activeBuses}</span>}
@@ -523,7 +529,7 @@ export default function AdminDashboard() {
 
         <button
           className={`tab-btn ${activeTab === 'incidents' ? 'active' : ''}`}
-          onClick={() => setActiveTab('incidents')}
+          onClick={() => handleTabChange('incidents')}
         >
           <AlertTriangle size={16} /> Incidents ({incidents.length})
         </button>
@@ -532,81 +538,147 @@ export default function AdminDashboard() {
       {/* 4. TAB CONTENTS */}
       <div className="admin-tab-content">
 
-        {/* TAB: OVERVIEW */}
+        {/* TAB: OVERVIEW (Reference 2 Layout) */}
         {activeTab === 'overview' && (
-          <div className="overview-tab">
-            <div className="overview-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+          <div className="overview-tab-rebuilt">
+            <div className="admin-overview-grid-layout">
               
-              {/* Operational Status Card */}
-              <div className="admin-card" style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Radio size={18} color="#2563EB" /> Realtime Corridor Status
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Live Active Buses:</span>
-                    <strong style={{ color: activeBuses > 0 ? '#16A34A' : '#0F172A' }}>{activeBuses} active on road</strong>
+              {/* LEFT COLUMN: LIVE FLEET VIEW MAP */}
+              <div className="overview-fleet-map-card">
+                <div className="card-header-row">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Radio size={18} color="#16A34A" />
+                    <h3>Live Fleet View</h3>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Drivers Awaiting Verification:</span>
-                    <strong style={{ color: pendingRequests.length > 0 ? '#D97706' : '#16A34A' }}>{pendingRequests.length} pending</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Configured Fleet Vehicles:</span>
-                    <strong>{fleetList.length} buses</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Active Scheduled Routes:</span>
-                    <strong>{schedulesList.length} schedules</strong>
+
+                  <div className="fleet-status-legends">
+                    <span className="legend-chip green">● Active Trips {activeBuses}</span>
+                    <span className="legend-chip slate">● Inactive {Math.max(0, fleetList.length - activeBuses)}</span>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-                  <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('drivers')}>
-                    Review Drivers ({pendingRequests.length})
-                  </button>
-                  <button className="btn btn-outline btn-sm" onClick={() => setActiveTab('schedules')}>
-                    Manage Schedules
+                <div className="overview-map-embed" style={{ height: '360px', position: 'relative' }}>
+                  <BusMap
+                    busData={selectedBusForMap ? {
+                      ...selectedBusForMap,
+                      status: selectedBusForMap.activeTripId || selectedBusForMap.status === 'ON_TRIP' ? 'LIVE' : selectedBusForMap.status
+                    } : null}
+                    routePath={routesList[0]?.polyline}
+                    stops={routesList[0]?.stops || []}
+                    busNumber={selectedBusForMap?.busNumber || 'Fleet Overview'}
+                    isLive={activeBuses > 0}
+                  />
+                </div>
+
+                <div className="overview-map-footer-strip">
+                  <span>Showing real-time positions for registered educational corridor vehicles.</span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('fleet')}
+                    className="view-all-link-btn"
+                  >
+                    View All Buses &rarr;
                   </button>
                 </div>
               </div>
 
-              {/* Pending Queue Quick Action */}
-              <div className="admin-card" style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <UserCheck size={18} color="#D97706" /> Driver Verification Queue
-                </h3>
-
-                {pendingRequests.length === 0 ? (
-                  <div style={{ padding: '30px 16px', textAlign: 'center', color: '#64748B', background: '#F8FAFC', borderRadius: '8px' }}>
-                    <CheckCircle2 size={32} color="#16A34A" style={{ marginBottom: '8px' }} />
-                    <p style={{ margin: 0, fontWeight: 600 }}>No pending driver applications.</p>
-                    <small>All applicant credentials have been reviewed.</small>
+              {/* RIGHT COLUMN: RECENT ALERTS & QUICK ACTIONS */}
+              <div className="overview-side-stack">
+                
+                {/* 1. RECENT ALERTS */}
+                <div className="admin-side-card recent-alerts-card">
+                  <div className="card-header-row">
+                    <h3>Recent Alerts</h3>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('incidents')}
+                      className="view-all-sub-link"
+                    >
+                      View All
+                    </button>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {pendingRequests.slice(0, 3).map((app) => (
-                      <div key={app.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                        <div>
-                          <strong style={{ display: 'block', color: '#0F172A' }}>{app.fullName || app.name}</strong>
-                          <span style={{ fontSize: '0.82rem', color: '#64748B' }}>{app.institutionName || 'Corridor Transport'}</span>
+
+                  <div className="recent-alerts-list">
+                    {incidents.length > 0 ? (
+                      incidents.slice(0, 4).map((inc) => (
+                        <div key={inc.id} className="recent-alert-item">
+                          <AlertTriangle size={15} color="#D97706" />
+                          <div className="alert-item-meta">
+                            <strong>{inc.type}</strong>
+                            <span>{inc.busId} · {inc.parentName || 'Parent report'}</span>
+                          </div>
+                          <span className="alert-time-tag">Recent</span>
                         </div>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => {
-                            setReviewingDriver(app);
-                            setAssignBusId(fleetList[0]?.id || '');
-                            setAssignRouteId(routesList[0]?.id || '');
-                          }}
-                        >
-                          <Eye size={13} /> Review
-                        </button>
+                      ))
+                    ) : pendingRequests.length > 0 ? (
+                      <div className="recent-alert-item" onClick={() => setActiveTab('drivers')} style={{ cursor: 'pointer' }}>
+                        <ShieldCheck size={15} color="#2563EB" />
+                        <div className="alert-item-meta">
+                          <strong>Driver Verification Pending</strong>
+                          <span>{pendingRequests.length} driver application(s) awaiting review</span>
+                        </div>
+                        <span className="alert-time-tag">Action Required</span>
                       </div>
-                    ))}
+                    ) : (
+                      <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748B', fontSize: '0.88rem' }}>
+                        <CheckCircle2 size={24} color="#16A34A" style={{ display: 'block', margin: '0 auto 8px auto' }} />
+                        <span>No active incidents or security alerts. Fleet operations normal.</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
 
+                {/* 2. QUICK ACTIONS */}
+                <div className="admin-side-card quick-actions-card">
+                  <div className="card-header-row">
+                    <h3>Quick Actions</h3>
+                  </div>
+
+                  <div className="quick-actions-grid">
+                    <button
+                      type="button"
+                      className="quick-action-btn"
+                      onClick={() => setShowCreateBusModal(true)}
+                    >
+                      <Plus size={16} color="#2563EB" />
+                      <span>Add Vehicle</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="quick-action-btn"
+                      onClick={() => setActiveTab('drivers')}
+                    >
+                      <UserCheck size={16} color="#16A34A" />
+                      <span>Review Drivers ({pendingRequests.length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="quick-action-btn"
+                      onClick={() => setShowCreateRouteModal(true)}
+                    >
+                      <MapPin size={16} color="#2563EB" />
+                      <span>Create Route</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="quick-action-btn"
+                      onClick={() => setShowScheduleModal(true)}
+                    >
+                      <Calendar size={16} color="#D97706" />
+                      <span>Add Schedule</span>
+                    </button>
+                  </div>
+
+                  <div className="quick-actions-trust-footer">
+                    <CheckCircle2 size={14} color="#16A34A" />
+                    <span>Safer journeys. Brighter futures.</span>
+                  </div>
+                </div>
+
+              </div>
             </div>
           </div>
         )}
@@ -634,7 +706,6 @@ export default function AdminDashboard() {
               <div className="driver-applications-grid">
                 {driverApps.map((app) => {
                   const status = (app.status || app.verificationStatus || 'pending').toLowerCase();
-                  const isPending = status === 'pending';
                   const isApproved = status === 'approved';
                   const isRejected = status === 'rejected';
 
@@ -1068,7 +1139,7 @@ export default function AdminDashboard() {
                         <span className="bus-tag">{inc.busId || 'Bus'}</span>
                       </div>
                       <span className="ticket-time">
-                        {new Date(inc.timestamp || Date.now()).toLocaleString()}
+                        {inc.timestamp ? new Date(inc.timestamp).toLocaleString() : 'Recent'}
                       </span>
                     </div>
 
@@ -1160,25 +1231,25 @@ export default function AdminDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Assigned Bus</label>
-                    <select value={assignBusId || 'BUS-24'} onChange={(e) => setAssignBusId(e.target.value)}>
+                    <select value={assignBusId || (fleetList[0]?.id || '')} onChange={(e) => setAssignBusId(e.target.value)}>
                       {fleetList.length > 0 ? (
                         fleetList.map((b) => (
                           <option key={b.id} value={b.id}>{b.busNumber} ({b.registrationNumber})</option>
                         ))
                       ) : (
-                        <option value="BUS-24">Bus 24 (AP 35 U 2424)</option>
+                        <option value="">No registered vehicles available</option>
                       )}
                     </select>
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Assigned Route</label>
-                    <select value={assignRouteId || 'ROUTE-VZ04'} onChange={(e) => setAssignRouteId(e.target.value)}>
+                    <select value={assignRouteId || (routesList[0]?.id || '')} onChange={(e) => setAssignRouteId(e.target.value)}>
                       {routesList.length > 0 ? (
                         routesList.map((r) => (
-                          <option key={r.id} value={r.id}>{r.code || 'VZ04'} - {r.routeName || r.name}</option>
+                          <option key={r.id} value={r.id}>{r.code ? `${r.code} - ` : ''}{r.routeName || r.name}</option>
                         ))
                       ) : (
-                        <option value="ROUTE-VZ04">VZ04 - Vizianagaram to MVGR Campus / Vizag</option>
+                        <option value="">No configured routes available</option>
                       )}
                     </select>
                   </div>
@@ -1512,5 +1583,6 @@ export default function AdminDashboard() {
       )}
 
     </div>
+    </AdminShell>
   );
 }

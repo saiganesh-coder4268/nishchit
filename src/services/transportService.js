@@ -15,7 +15,8 @@ import {
   where,
   orderBy,
   limit,
-  onSnapshot
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 import {
   ref as rtdbRef,
@@ -26,18 +27,30 @@ import {
   get as rtdbGet
 } from 'firebase/database';
 import { db, rtdb } from '../firebase';
-import { INITIAL_VEHICLES, INITIAL_ROUTES, REGISTERED_INSTITUTIONS } from '../data/regionData';
+import { INITIAL_VEHICLES, INITIAL_ROUTES, REGISTERED_INSTITUTIONS, INITIAL_JOBS, INITIAL_VERIFIED_DRIVERS, INITIAL_STUDENTS } from '../data/regionData';
+import { isValidCoordinate } from '../utils/busStatus';
 
 // ---------------------------------------------------------------------------
 // 1. DATABASE BOOTSTRAP / SEED
 // ---------------------------------------------------------------------------
 
+/**
+ * Production environment guarantee:
+ * Never auto-seed fake or fallback data on application startup.
+ */
 export async function ensureInitialCorridorData() {
+  // Production safe: No automatic seeding of fake records.
+  return Promise.resolve();
+}
+
+/**
+ * Explicit Developer / Administrative Seed Function
+ * Only executed when explicitly invoked from admin dev tools, never during normal app boots.
+ */
+export async function seedDemoCorridorData() {
   try {
-    // Check if buses exist in Firestore
     const busesSnap = await getDocs(collection(db, 'buses'));
     if (busesSnap.empty) {
-      console.log('Seeding initial buses into Firestore...');
       for (const bus of INITIAL_VEHICLES) {
         await setDoc(doc(db, 'buses', bus.id), {
           ...bus,
@@ -50,10 +63,8 @@ export async function ensureInitialCorridorData() {
       }
     }
 
-    // Check if routes exist in Firestore
     const routesSnap = await getDocs(collection(db, 'routes'));
     if (routesSnap.empty) {
-      console.log('Seeding initial routes into Firestore...');
       for (const route of INITIAL_ROUTES) {
         await setDoc(doc(db, 'routes', route.id), {
           ...route,
@@ -68,7 +79,8 @@ export async function ensureInitialCorridorData() {
       }
     }
   } catch (err) {
-    console.warn('Initial corridor data check/seed note:', err?.message || err);
+    console.error('Explicit corridor data seed error:', err);
+    throw err;
   }
 }
 
@@ -124,13 +136,13 @@ export async function submitDriverApplication(driverData) {
   const applicationPayload = {
     driverId: driverData.uid || appId,
     applicationId: appId,
-    name: driverData.name || driverData.fullName || 'Driver Applicant',
-    fullName: driverData.fullName || driverData.name || 'Driver Applicant',
+    name: driverData.name || driverData.fullName || '',
+    fullName: driverData.fullName || driverData.name || '',
     email: driverData.email || '',
     phone: driverData.phone || '',
-    busNumber: driverData.busNumber || 'Bus 24',
-    from: driverData.from || 'Vizianagaram',
-    to: driverData.to || 'Visakhapatnam',
+    busNumber: driverData.busNumber || '',
+    from: driverData.from || '',
+    to: driverData.to || '',
     pincode: driverData.pincode || '',
     locality: driverData.locality || '',
     district: driverData.district || '',
@@ -138,10 +150,10 @@ export async function submitDriverApplication(driverData) {
     institutionName: driverData.institutionName || '',
     licenceNumber: driverData.licenceNumber || '',
     licenceValidity: driverData.licenceValidity || '',
-    idDocumentType: driverData.idDocumentType || 'Aadhaar Card',
+    idDocumentType: driverData.idDocumentType || '',
     idDocumentNumber: driverData.idDocumentNumber || '',
-    idDocValidity: driverData.idDocValidity || 'Permanent',
-    experienceYears: driverData.experienceYears || '5+ Years',
+    idDocValidity: driverData.idDocValidity || '',
+    experienceYears: driverData.experienceYears || '',
     photoUrl: driverData.photoUrl || '',
     status: 'pending',
     verificationStatus: 'pending',
@@ -181,32 +193,34 @@ export function subscribeDriverApplications(callback) {
   );
 }
 
-export async function approveDriverApplication(appId, driverId, busId = null, routeId = null, adminUid = 'admin') {
-  const now = Date.now();
-  const effectiveBusId = busId || 'BUS-24';
-  const effectiveRouteId = routeId || 'ROUTE-VZ04';
-
-  const updates = {
-    status: 'approved',
-    verificationStatus: 'approved',
-    reviewedAt: now,
-    reviewedBy: adminUid,
-    assignedBusId: effectiveBusId,
-    assignedRouteId: effectiveRouteId,
-    busId: effectiveBusId,
-    routeId: effectiveRouteId,
-    rejectionReason: null
-  };
-
-  // Update application
-  try {
-    await updateDoc(doc(db, 'driverApplications', appId), updates);
-  } catch (e) {
-    console.warn('Driver application update note:', e);
+export async function approveDriverApplication(appId, driverId, busId, routeId, adminUid = 'admin') {
+  if (!busId || !routeId) {
+    throw new Error('Both a valid Bus and Route must be explicitly assigned to approve driver.');
   }
 
-  // Fetch application details to get name and phone
-  let driverName = 'Verified Driver';
+  const now = Date.now();
+  const targetUid = driverId || appId;
+
+  // Verify bus exists
+  const busSnap = await getDoc(doc(db, 'buses', busId));
+  if (!busSnap.exists()) {
+    throw new Error(`Assigned bus "${busId}" does not exist in the fleet database.`);
+  }
+  const busData = busSnap.data() || {};
+  const busNumber = busData.busNumber || busId;
+  const registrationNumber = busData.registrationNumber || '';
+
+  // Verify route exists
+  const routeSnap = await getDoc(doc(db, 'routes', routeId));
+  if (!routeSnap.exists()) {
+    throw new Error(`Assigned route "${routeId}" does not exist in the route database.`);
+  }
+  const routeData = routeSnap.data() || {};
+  const routeName = routeData.routeName || routeData.name || routeId;
+  const routeCode = routeData.code || routeData.routeNumber || '';
+
+  // Fetch application details to get genuine name and phone
+  let driverName = 'Driver';
   let driverPhone = '';
   try {
     const appSnap = await getDoc(doc(db, 'driverApplications', appId));
@@ -219,76 +233,108 @@ export async function approveDriverApplication(appId, driverId, busId = null, ro
     console.warn('App details fetch note:', e);
   }
 
-  // Update driver user document
-  const targetUid = driverId || appId;
-  const userUpdates = {
+  // Atomic batch write across driverApplications, users, buses, routes
+  const batch = writeBatch(db);
+
+  // 1. Update application
+  batch.update(doc(db, 'driverApplications', appId), {
     status: 'approved',
     verificationStatus: 'approved',
     reviewedAt: now,
     reviewedBy: adminUid,
-    busId: effectiveBusId,
-    assignedBusId: effectiveBusId,
-    busNumber: 'Bus 24',
-    routeId: effectiveRouteId,
-    assignedRouteId: effectiveRouteId,
-    routeName: 'Route 04 (Vizianagaram -> Visakhapatnam)',
+    assignedBusId: busId,
+    assignedRouteId: routeId,
+    busId: busId,
+    routeId: routeId,
+    busNumber,
+    registrationNumber,
+    routeName,
     rejectionReason: null
-  };
+  });
 
-  await saveUserProfile(targetUid, userUpdates);
+  // 2. Update user profile
+  batch.set(
+    doc(db, 'users', targetUid),
+    {
+      role: 'driver',
+      status: 'approved',
+      verificationStatus: 'approved',
+      reviewedAt: now,
+      reviewedBy: adminUid,
+      busId: busId,
+      assignedBusId: busId,
+      busNumber,
+      busRegistrationNumber: registrationNumber,
+      routeId: routeId,
+      assignedRouteId: routeId,
+      routeName,
+      routeCode,
+      rejectionReason: null,
+      updatedAt: now
+    },
+    { merge: true }
+  );
 
-  // Assign driver to the bus if busId is specified
-  if (effectiveBusId) {
-    try {
-      await updateDoc(doc(db, 'buses', effectiveBusId), {
-        driverId: targetUid,
-        driverName,
-        driverPhone,
-        routeId: effectiveRouteId,
-        status: 'ASSIGNED',
-        updatedAt: now
-      });
-    } catch (e) {
-      console.warn('Bus update note:', e);
-    }
-  }
+  // 3. Update bus
+  batch.update(doc(db, 'buses', busId), {
+    driverId: targetUid,
+    driverName,
+    driverPhone,
+    routeId,
+    routeName,
+    status: 'ASSIGNED',
+    updatedAt: now
+  });
 
-  // Update route with assigned driver and bus if routeId is specified
-  if (effectiveRouteId) {
-    try {
-      await updateDoc(doc(db, 'routes', effectiveRouteId), {
-        driverId: targetUid,
-        driverName,
-        busId: effectiveBusId,
-        updatedAt: now
-      });
-    } catch (e) {
-      console.warn('Route update note:', e);
-    }
-  }
+  // 4. Update route
+  batch.update(doc(db, 'routes', routeId), {
+    driverId: targetUid,
+    driverName,
+    busId,
+    busNumber,
+    updatedAt: now
+  });
+
+  await batch.commit();
 }
 
 export async function rejectDriverApplication(appId, driverId, rejectionReason, adminUid = 'admin') {
+  const reasonText = (rejectionReason || '').trim();
+  if (!reasonText) {
+    throw new Error('A rejection reason must be provided to reject an application.');
+  }
+
   const now = Date.now();
-  const reasonText = (rejectionReason || '').trim() || 'Application credentials could not be verified by transport administration.';
-  const updates = {
+  const targetUid = driverId || appId;
+
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, 'driverApplications', appId), {
     status: 'rejected',
     verificationStatus: 'rejected',
     reviewedAt: now,
     reviewedBy: adminUid,
     rejectionReason: reasonText
-  };
-
-  await updateDoc(doc(db, 'driverApplications', appId), updates);
-
-  const targetUid = driverId || appId;
-  await saveUserProfile(targetUid, {
-    status: 'rejected',
-    verificationStatus: 'rejected',
-    rejectionReason: reasonText,
-    reviewedAt: now,
-    reviewedBy: adminUid
   });
+
+  batch.set(
+    doc(db, 'users', targetUid),
+    {
+      status: 'rejected',
+      verificationStatus: 'rejected',
+      rejectionReason: reasonText,
+      reviewedAt: now,
+      reviewedBy: adminUid,
+      busId: null,
+      assignedBusId: null,
+      routeId: null,
+      assignedRouteId: null,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  await batch.commit();
 }
 
 // ---------------------------------------------------------------------------
@@ -445,32 +491,45 @@ export async function startDriverTrip(arg1, arg2, arg3) {
   let busId;
   let routeId;
   let driverInfo = {};
-  let initialCoords = {};
+  let initialCoords = null;
 
   if (typeof arg1 === 'string') {
     busId = arg1;
     driverInfo = typeof arg2 === 'object' ? arg2 : { uid: arg2 };
     const extra = arg3 || {};
     routeId = extra.routeId || driverInfo.routeId || '';
-    initialCoords = {
-      latitude: extra.latitude ?? 18.1067,
-      longitude: extra.longitude ?? 83.3956,
-      accuracy: extra.accuracy ?? 10
-    };
+    if (isValidCoordinate(extra.latitude, extra.longitude)) {
+      initialCoords = {
+        latitude: Number(extra.latitude),
+        longitude: Number(extra.longitude),
+        accuracy: extra.accuracy ?? 10
+      };
+    }
     if (extra.driverName) driverInfo.name = extra.driverName;
   } else if (arg1 && typeof arg1 === 'object') {
     busId = arg1.busId;
     routeId = arg1.routeId || '';
     driverInfo = arg1.driverInfo || {};
-    initialCoords = arg1.initialCoords || { latitude: 18.1067, longitude: 83.3956 };
+    if (arg1.initialCoords && isValidCoordinate(arg1.initialCoords.latitude, arg1.initialCoords.longitude)) {
+      initialCoords = {
+        latitude: Number(arg1.initialCoords.latitude),
+        longitude: Number(arg1.initialCoords.longitude),
+        accuracy: arg1.initialCoords.accuracy ?? 10
+      };
+    }
   }
 
-  if (!busId) throw new Error('No bus assigned for trip.');
-  const lat = Number(initialCoords.latitude ?? 18.1067);
-  const lng = Number(initialCoords.longitude ?? 83.3956);
+  if (!busId) throw new Error('Cannot start trip: No bus assigned.');
+  if (!driverInfo?.uid && !driverInfo?.driverId) {
+    throw new Error('Cannot start trip: Driver identity missing.');
+  }
 
   const tripId = `TRIP-${busId}-${Date.now()}`;
   const now = Date.now();
+
+  const hasGpsFix = initialCoords !== null;
+  const lat = hasGpsFix ? initialCoords.latitude : null;
+  const lng = hasGpsFix ? initialCoords.longitude : null;
 
   const tripPayload = {
     tripId,
@@ -479,58 +538,53 @@ export async function startDriverTrip(arg1, arg2, arg3) {
     driverName: driverInfo.name || driverInfo.fullName || 'Assigned Driver',
     driverPhone: driverInfo.phone || '',
     busId,
-    busNumber: driverInfo.busNumber || 'Bus 24',
-    registrationNumber: driverInfo.busRegistrationNumber || 'AP 35 U 2424',
-    routeId: routeId || 'ROUTE-VZ04',
-    routeName: driverInfo.routeName || 'Route 04 (Vizianagaram -> Visakhapatnam)',
+    busNumber: driverInfo.busNumber || busId,
+    registrationNumber: driverInfo.busRegistrationNumber || driverInfo.registrationNumber || '',
+    routeId: routeId || driverInfo.routeId || '',
+    routeName: driverInfo.routeName || '',
     status: 'ACTIVE',
     startedAt: now,
     endedAt: null,
-    startedLocation: { latitude: lat, longitude: lng },
-    currentLocation: { latitude: lat, longitude: lng, accuracy: initialCoords.accuracy || 10 },
-    lastLocationUpdate: now
+    startedLocation: hasGpsFix ? { latitude: lat, longitude: lng } : null,
+    currentLocation: hasGpsFix ? { latitude: lat, longitude: lng, accuracy: initialCoords.accuracy || 10 } : null,
+    lastLocationUpdate: hasGpsFix ? now : null
   };
 
   // 1. Create Firestore trip
-  try {
-    await setDoc(doc(db, 'trips', tripId), tripPayload);
-  } catch (e) {
-    console.warn('Trip doc create note:', e);
-  }
+  await setDoc(doc(db, 'trips', tripId), tripPayload);
 
   // 2. Update Firestore bus
-  try {
-    await updateDoc(doc(db, 'buses', busId), {
-      status: 'ON_TRIP',
-      activeTripId: tripId,
-      latitude: lat,
-      longitude: lng,
-      accuracy: initialCoords.accuracy || 10,
-      speed: initialCoords.speed || 0,
-      heading: initialCoords.heading || 0,
-      lastUpdated: now,
-      updatedAt: now
-    });
-  } catch (e) {
-    console.warn('Bus status update note:', e);
+  const busUpdates = {
+    status: 'ON_TRIP',
+    activeTripId: tripId,
+    lastUpdated: now,
+    updatedAt: now
+  };
+  if (hasGpsFix) {
+    busUpdates.latitude = lat;
+    busUpdates.longitude = lng;
+    busUpdates.accuracy = initialCoords.accuracy || 10;
+    busUpdates.speed = initialCoords.speed || 0;
+    busUpdates.heading = initialCoords.heading || 0;
   }
+  await updateDoc(doc(db, 'buses', busId), busUpdates);
 
   // 3. Publish to Realtime Database
   const rtdbPayload = {
     tripId,
     busId,
-    busNumber: driverInfo.busNumber || 'Bus 24',
-    registrationNumber: driverInfo.busRegistrationNumber || 'AP 35 U 2424',
-    routeId: routeId || 'ROUTE-VZ04',
-    routeName: driverInfo.routeName || 'Route 04',
-    driverId: driverInfo.uid || '',
-    driverName: driverInfo.name || driverInfo.fullName || 'Driver',
-    driverPhone: driverInfo.phone || '',
+    busNumber: tripPayload.busNumber,
+    registrationNumber: tripPayload.registrationNumber,
+    routeId: tripPayload.routeId,
+    routeName: tripPayload.routeName,
+    driverId: tripPayload.driverId,
+    driverName: tripPayload.driverName,
+    driverPhone: tripPayload.driverPhone,
     latitude: lat,
     longitude: lng,
-    accuracy: initialCoords.accuracy || 10,
-    speed: initialCoords.speed || 0,
-    heading: initialCoords.heading || 0,
+    accuracy: hasGpsFix ? (initialCoords.accuracy || 10) : null,
+    speed: 0,
+    heading: 0,
     timestamp: now,
     active: true
   };
@@ -543,9 +597,9 @@ export async function startDriverTrip(arg1, arg2, arg3) {
     // 4. Send start message to bus channel
     await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
       senderId: driverInfo.uid || 'driver-sys',
-      senderName: driverInfo.name || 'Driver',
+      senderName: tripPayload.driverName,
       senderRole: 'driver',
-      message: '🚌 Trip Started: Live GPS tracking is now streaming from the bus.',
+      message: 'Trip Started: Live GPS tracking is now streaming from the bus.',
       timestamp: now,
       isSystemMessage: true
     });
@@ -575,7 +629,7 @@ export async function streamDriverGpsLocation(arg1, arg2) {
   if (!busId) return;
   const lat = Number(coords.latitude ?? coords.lat);
   const lng = Number(coords.longitude ?? coords.lng);
-  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+  if (!isValidCoordinate(lat, lng)) {
     return;
   }
 
@@ -630,7 +684,6 @@ export async function endDriverTrip(arg1, arg2, arg3) {
   let busId;
   let tripId;
   let driverInfo = {};
-  let finalCoords = null;
 
   if (typeof arg1 === 'string') {
     busId = arg1;
@@ -640,18 +693,37 @@ export async function endDriverTrip(arg1, arg2, arg3) {
     busId = arg1.busId;
     tripId = arg1.tripId;
     driverInfo = arg1.driverInfo || {};
-    finalCoords = arg1.finalCoords || null;
   }
 
   const now = Date.now();
-  let durationMinutes = 1;
+  let durationMinutes = 0;
+  let tripData = null;
 
   if (tripId) {
     try {
+      const tripSnap = await getDoc(doc(db, 'trips', tripId));
+      if (tripSnap.exists()) {
+        tripData = tripSnap.data();
+        if (tripData.startedAt) {
+          durationMinutes = Math.max(1, Math.round((now - tripData.startedAt) / 60000));
+        }
+      }
+
       await updateDoc(doc(db, 'trips', tripId), {
         status: 'COMPLETED',
         endedAt: now,
         durationMinutes
+      });
+
+      // Archive to tripHistory collection so Admin history displays completed runs
+      await setDoc(doc(db, 'tripHistory', tripId), {
+        ...(tripData || {}),
+        tripId,
+        busId: busId || tripData?.busId || '',
+        status: 'COMPLETED',
+        endedAt: now,
+        durationMinutes,
+        createdAt: now
       });
     } catch (e) {
       console.warn('Trip complete note:', e);
@@ -678,9 +750,9 @@ export async function endDriverTrip(arg1, arg2, arg3) {
 
       await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
         senderId: driverInfo?.uid || 'driver-sys',
-        senderName: driverInfo?.name || 'Driver',
+        senderName: driverInfo?.name || driverInfo?.fullName || 'Driver',
         senderRole: 'driver',
-        message: "🏁 Trip Completed: Today's bus run has concluded safely.",
+        message: "Trip Completed: Today's bus run has concluded safely.",
         timestamp: now,
         isSystemMessage: true
       });
@@ -783,6 +855,8 @@ export async function submitIncidentReport(report) {
   await setDoc(doc(db, 'reports', reportId), payload);
   return payload;
 }
+
+export const createIncidentReport = submitIncidentReport;
 
 // ---------------------------------------------------------------------------
 // 9. SCHEDULE MANAGEMENT & DRIVER ASSIGNMENT
@@ -946,3 +1020,643 @@ export async function deleteSchedule(scheduleId) {
   await deleteDoc(doc(db, 'schedules', scheduleId));
 }
 
+// ---------------------------------------------------------------------------
+// 10. PARENT JOURNEY DISCOVERY & RESOLUTION
+// ---------------------------------------------------------------------------
+
+function normalizeLoc(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[(),.\-\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function locationMatches(candidate, query) {
+  const c = normalizeLoc(candidate);
+  const q = normalizeLoc(query);
+  if (!c || !q) return false;
+  if (c === q || c.includes(q) || q.includes(c)) return true;
+
+  // Token-level matching: check if strong identifying tokens match
+  const stopWords = new Set(['and', 'the', 'for', 'all', 'college', 'university', 'campus', 'deemed', 'autonomous', 'engineering', 'institute', 'technology', 'sciences', 'gate', 'road', 'junction', 'area']);
+  const cTokens = c.split(' ').filter(t => t.length >= 3 && !stopWords.has(t));
+  const qTokens = q.split(' ').filter(t => t.length >= 3 && !stopWords.has(t));
+
+  for (const token of cTokens) {
+    if (qTokens.includes(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Finds all real routes matching the requested journey (FROM -> TO).
+ * Considers route origin, destination endpoint, institution, and ordered stops.
+ */
+export function findMatchingRoutes({ routes = [], from, to, institutionId = null }) {
+  if (!routes || routes.length === 0) return [];
+  if (!from && !to) return [];
+
+  const matched = [];
+
+  for (const route of routes) {
+    // If an institutionId is specified, check if route belongs to this institution
+    if (institutionId) {
+      const matchesInst = route.institutionId === institutionId ||
+        locationMatches(route.institutionName, institutionId) ||
+        locationMatches(route.institutionId, institutionId);
+      if (!matchesInst) continue;
+    }
+
+    const routeFrom = route.from || route.stops?.[0]?.name || '';
+    const routeTo = route.to || route.stops?.[route.stops.length - 1]?.name || '';
+    const stops = route.stops || [];
+
+    // Find stop indices
+    let fromIdx = -1;
+    let toIdx = -1;
+
+    // Check if FROM matches route origin, institution ID, or institution Name
+    const matchesFromOrigin = !from || locationMatches(routeFrom, from) ||
+      (route.institutionId && locationMatches(route.institutionId, from)) ||
+      (route.institutionName && locationMatches(route.institutionName, from)) ||
+      (route.name && locationMatches(route.name, from));
+
+    if (matchesFromOrigin) {
+      fromIdx = 0;
+    } else {
+      fromIdx = stops.findIndex(s => locationMatches(s.name, from));
+    }
+
+    // Check if TO matches route destination or intermediate stops
+    const matchesToDestination = locationMatches(routeTo, to) ||
+      (route.name && locationMatches(route.name, to));
+
+    if (matchesToDestination) {
+      toIdx = stops.length > 0 ? stops.length : 1;
+    } else {
+      toIdx = stops.findIndex(s => locationMatches(s.name, to));
+    }
+
+    // A route matches if both from and to are served AND from appears before or at to
+    // If only 'to' is provided, we match if the route contains 'to'
+    if (to && from) {
+      if (fromIdx !== -1 && toIdx !== -1 && (fromIdx <= toIdx || matchesToDestination)) {
+        matched.push({
+          ...route,
+          matchedFromIndex: fromIdx,
+          matchedToIndex: toIdx
+        });
+      }
+    } else if (to && !from) {
+      if (toIdx !== -1) {
+        matched.push({
+          ...route,
+          matchedFromIndex: 0,
+          matchedToIndex: toIdx
+        });
+      }
+    } else if (from && !to) {
+      if (fromIdx !== -1) {
+        matched.push({
+          ...route,
+          matchedFromIndex: fromIdx,
+          matchedToIndex: stops.length > 0 ? stops.length - 1 : 1
+        });
+      }
+    }
+  }
+
+  return matched;
+}
+
+/**
+ * Direct positional helper for Parent Journey Discovery:
+ * findRoutesForJourney(institutionId, origin, destinationStop, routes)
+ */
+export function findRoutesForJourney(institutionId, origin, destinationStop, routes = []) {
+  return findMatchingRoutes({
+    routes,
+    from: origin,
+    to: destinationStop,
+    institutionId
+  });
+}
+
+/**
+ * Resolves a matching route's real bus, schedule, and active trip state.
+ */
+export function resolveBusJourneyDetails({
+  route,
+  buses = [],
+  schedules = [],
+  activeTrips = [],
+  liveLocations = {}
+}) {
+  if (!route) return null;
+
+  // 1. Resolve assigned bus
+  const assignedBus = buses.find(b => b.id === route.busId || b.routeId === route.id || b.assignedRouteId === route.id) || null;
+
+  // 2. Resolve schedule
+  const schedule = schedules.find(s => s.routeId === route.id || (assignedBus && s.busId === assignedBus.id)) || null;
+
+  // 3. Resolve active trip
+  const busId = assignedBus?.id || route.busId || null;
+  const activeTrip = activeTrips.find(t => t.busId === busId || t.routeId === route.id) || null;
+
+  // 4. Live location from RTDB map or bus record
+  const liveLocation = busId ? (liveLocations[busId] || null) : null;
+
+  // 5. Determine authentic state
+  let state = 'SCHEDULED';
+  const isTripActive = Boolean(
+    (assignedBus && (assignedBus.status === 'ON_TRIP' || assignedBus.status === 'LIVE')) ||
+    (activeTrip && activeTrip.status === 'ACTIVE') ||
+    (liveLocation && liveLocation.active === true)
+  );
+
+  const isTripCompleted = Boolean(
+    (assignedBus && assignedBus.status === 'COMPLETED') ||
+    (activeTrip && activeTrip.status === 'COMPLETED')
+  );
+
+  if (isTripActive) {
+    state = 'LIVE';
+  } else if (isTripCompleted) {
+    state = 'COMPLETED';
+  } else if (!assignedBus && !route.busId) {
+    state = 'NO_BUS_ASSIGNED';
+  } else {
+    state = 'SCHEDULED';
+  }
+
+  // 6. Departure & arrival times
+  const departureTime = schedule?.departureTime || route.departureTime || '07:15 AM';
+  const expectedArrival = schedule?.expectedArrival || route.expectedArrival || '08:15 AM';
+
+  return {
+    route,
+    bus: assignedBus,
+    busId,
+    busNumber: assignedBus?.busNumber || route.busNumber || (busId ? busId : 'Unassigned'),
+    registrationNumber: assignedBus?.registrationNumber || assignedBus?.busRegistrationNumber || '',
+    capacity: assignedBus?.capacity || 52,
+    driverName: assignedBus?.driverName || route.driverName || 'Assigned Operator',
+    driverPhone: assignedBus?.driverPhone || '',
+    schedule,
+    activeTrip,
+    tripId: activeTrip?.id || activeTrip?.tripId || assignedBus?.activeTripId || null,
+    liveLocation,
+    state,
+    departureTime,
+    expectedArrival,
+    stops: route.stops || []
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 11. INSTITUTIONS & PLATFORM ECOSYSTEM
+// ---------------------------------------------------------------------------
+
+export function subscribeInstitutions(callback) {
+  const colRef = collection(db, 'institutions');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      if (!snap.empty) {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(items);
+      } else {
+        callback(REGISTERED_INSTITUTIONS.map(inst => ({
+          ...inst,
+          verificationStatus: 'verified',
+          status: 'active'
+        })));
+      }
+    },
+    (err) => {
+      console.warn('subscribeInstitutions error, using registered corridor fallback:', err);
+      callback(REGISTERED_INSTITUTIONS.map(inst => ({
+        ...inst,
+        verificationStatus: 'verified',
+        status: 'active'
+      })));
+    }
+  );
+}
+
+export async function createInstitution(instData) {
+  const id = instData.id || `INST-${Date.now().toString().slice(-6)}`;
+  const payload = {
+    ...instData,
+    id,
+    status: instData.status || 'pending',
+    verificationStatus: instData.verificationStatus || 'pending',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'institutions', id), payload, { merge: true });
+  return payload;
+}
+
+export async function verifyInstitutionPlatform(institutionId, verificationStatus = 'verified', notes = '') {
+  await updateDoc(doc(db, 'institutions', institutionId), {
+    verificationStatus,
+    status: verificationStatus === 'verified' ? 'active' : 'suspended',
+    adminNotes: notes,
+    verifiedAt: Date.now(),
+    updatedAt: Date.now()
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 12. DRIVER PROFILES, VERIFICATION & MARKETPLACE
+// ---------------------------------------------------------------------------
+
+export function subscribeDriverProfiles(callback) {
+  const colRef = collection(db, 'driverProfiles');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      if (!snap.empty) {
+        const profiles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(profiles);
+      } else {
+        callback(INITIAL_VERIFIED_DRIVERS);
+      }
+    },
+    (err) => {
+      console.warn('subscribeDriverProfiles error, using corridor drivers:', err);
+      callback(INITIAL_VERIFIED_DRIVERS);
+    }
+  );
+}
+
+export async function saveDriverProfile(driverId, profileData) {
+  if (!driverId) throw new Error('Driver ID is required to save profile.');
+  const payload = {
+    ...profileData,
+    driverId,
+    id: driverId,
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'driverProfiles', driverId), payload, { merge: true });
+  // Also update user profile
+  try {
+    await updateDoc(doc(db, 'users', driverId), {
+      ...payload,
+      role: 'driver'
+    });
+  } catch {}
+  return payload;
+}
+
+export async function submitDriverDocuments(driverId, documentData) {
+  const updates = {
+    documents: documentData,
+    verificationStatus: 'pending',
+    submittedAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'driverProfiles', driverId), updates, { merge: true });
+  try {
+    await updateDoc(doc(db, 'users', driverId), {
+      verificationStatus: 'pending'
+    });
+  } catch {}
+}
+
+export async function platformVerifyDriver(driverId, status = 'approved', adminNotes = '') {
+  const updates = {
+    verificationStatus: status,
+    isPlatformVerified: status === 'approved',
+    adminNotes,
+    verifiedAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'driverProfiles', driverId), updates, { merge: true });
+  try {
+    await updateDoc(doc(db, 'users', driverId), {
+      verificationStatus: status
+    });
+  } catch {}
+}
+
+// ---------------------------------------------------------------------------
+// 13. JOB MARKETPLACE (INSTITUTION REQUIREMENTS & DRIVER APPLICATIONS)
+// ---------------------------------------------------------------------------
+
+export function subscribeJobPostings(callback) {
+  const colRef = collection(db, 'jobPostings');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      if (!snap.empty) {
+        const jobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        jobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        callback(jobs);
+      } else {
+        callback(INITIAL_JOBS);
+      }
+    },
+    (err) => {
+      console.warn('subscribeJobPostings note:', err);
+      callback(INITIAL_JOBS);
+    }
+  );
+}
+
+export async function createJobPosting(jobData) {
+  const id = jobData.id || `JOB-${Date.now().toString().slice(-4)}`;
+  const payload = {
+    ...jobData,
+    id,
+    status: 'OPEN',
+    applicantsCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'jobPostings', id), payload, { merge: true });
+  return payload;
+}
+
+export async function closeJobPosting(jobId) {
+  await updateDoc(doc(db, 'jobPostings', jobId), {
+    status: 'CLOSED',
+    updatedAt: Date.now()
+  });
+}
+
+export async function applyForJob(driverId, jobId, applicationData) {
+  const appId = `APP-${driverId}-${jobId}`;
+  const payload = {
+    ...applicationData,
+    id: appId,
+    driverId,
+    jobId,
+    status: 'APPLIED', // APPLIED | REVIEWING | SHORTLISTED | SELECTED | REJECTED
+    appliedAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'jobApplications', appId), payload, { merge: true });
+
+  // Increment applicants count
+  try {
+    const jobRef = doc(db, 'jobPostings', jobId);
+    const jobSnap = await getDoc(jobRef);
+    if (jobSnap.exists()) {
+      const currentCount = jobSnap.data().applicantsCount || 0;
+      await updateDoc(jobRef, { applicantsCount: currentCount + 1 });
+    }
+  } catch {}
+
+  return payload;
+}
+
+export function subscribeJobApplications(callback, filterKey = null, filterVal = null) {
+  const colRef = collection(db, 'jobApplications');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      let apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (filterKey && filterVal) {
+        apps = apps.filter(a => a[filterKey] === filterVal);
+      }
+      callback(apps);
+    },
+    (err) => {
+      console.warn('subscribeJobApplications error:', err);
+      callback([]);
+    }
+  );
+}
+
+export async function updateJobApplicationStatus(applicationId, status, hiringDetails = {}) {
+  const updates = {
+    status,
+    ...hiringDetails,
+    updatedAt: Date.now()
+  };
+  await updateDoc(doc(db, 'jobApplications', applicationId), updates);
+
+  // If driver was selected / hired, automatically connect driver profile to institution
+  if (status === 'SELECTED' && hiringDetails.institutionId && hiringDetails.driverId) {
+    await setDoc(doc(db, 'driverProfiles', hiringDetails.driverId), {
+      hiredByInstitutionId: hiringDetails.institutionId,
+      hiredByInstitutionName: hiringDetails.institutionName || 'Institution',
+      availability: 'BUSY',
+      updatedAt: Date.now()
+    }, { merge: true });
+
+    try {
+      await updateDoc(doc(db, 'users', hiringDetails.driverId), {
+        institutionId: hiringDetails.institutionId,
+        institutionName: hiringDetails.institutionName || 'Institution'
+      });
+    } catch {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 14. DRIVER INVITATIONS (INSTITUTION DIRECT RECRUITMENT)
+// ---------------------------------------------------------------------------
+
+export async function sendDriverInvitation(invitationData) {
+  const id = `INV-${Date.now().toString().slice(-6)}`;
+  const payload = {
+    ...invitationData,
+    id,
+    status: 'PENDING', // PENDING | ACCEPTED | DECLINED
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await setDoc(doc(db, 'driverInvitations', id), payload);
+  return payload;
+}
+
+export function subscribeDriverInvitations(driverId, callback) {
+  const colRef = collection(db, 'driverInvitations');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      let invs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (driverId) {
+        invs = invs.filter(i => i.driverId === driverId);
+      }
+      callback(invs);
+    },
+    (err) => {
+      console.warn('subscribeDriverInvitations note:', err);
+      callback([]);
+    }
+  );
+}
+
+export async function respondToDriverInvitation(invitationId, responseStatus = 'ACCEPTED', details = {}) {
+  await updateDoc(doc(db, 'driverInvitations', invitationId), {
+    status: responseStatus,
+    respondedAt: Date.now(),
+    updatedAt: Date.now()
+  });
+
+  // If accepted, connect driver to the institution
+  if (responseStatus === 'ACCEPTED' && details.driverId && details.institutionId) {
+    await setDoc(doc(db, 'driverProfiles', details.driverId), {
+      hiredByInstitutionId: details.institutionId,
+      hiredByInstitutionName: details.institutionName || 'Institution',
+      availability: 'BUSY',
+      updatedAt: Date.now()
+    }, { merge: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 15. OPERATIONAL ASSIGNMENT (CONNECTING DRIVER TO BUS & ROUTE)
+// ---------------------------------------------------------------------------
+
+export async function assignDriverAndRouteToBus(busId, driverId, routeId, institutionId) {
+  const batch = writeBatch(db);
+
+  // 1. Fetch driver details
+  let driverName = 'Driver';
+  let driverPhone = '';
+  try {
+    const dSnap = await getDoc(doc(db, 'driverProfiles', driverId));
+    if (dSnap.exists()) {
+      const d = dSnap.data();
+      driverName = d.fullName || d.name || driverName;
+      driverPhone = d.phone || '';
+    }
+  } catch {}
+
+  // 2. Fetch route details
+  let routeName = 'Route';
+  try {
+    const rSnap = await getDoc(doc(db, 'routes', routeId));
+    if (rSnap.exists()) {
+      routeName = rSnap.data().routeName || rSnap.data().name || routeName;
+    }
+  } catch {}
+
+  // 3. Update Bus
+  batch.update(doc(db, 'buses', busId), {
+    driverId,
+    driverName,
+    driverPhone,
+    routeId,
+    routeName,
+    status: 'ASSIGNED',
+    institutionId: institutionId || 'INST-ABC-SCHOOL',
+    updatedAt: Date.now()
+  });
+
+  // 4. Update Driver Profile
+  batch.set(doc(db, 'driverProfiles', driverId), {
+    assignedBusId: busId,
+    assignedRouteId: routeId,
+    assignedRouteName: routeName,
+    hiredByInstitutionId: institutionId || 'INST-ABC-SCHOOL',
+    updatedAt: Date.now()
+  }, { merge: true });
+
+  // 5. Update Route
+  batch.update(doc(db, 'routes', routeId), {
+    busId,
+    assignedBusId: busId,
+    driverId,
+    driverName,
+    status: 'ACTIVE',
+    updatedAt: Date.now()
+  });
+
+  await batch.commit();
+}
+
+// ---------------------------------------------------------------------------
+// 16. STUDENT & PARENT JOURNEY DISCOVERY SERVICE
+// ---------------------------------------------------------------------------
+
+export function subscribeParentStudents(parentId, parentEmail, callback) {
+  if (!parentId && !parentEmail) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = collection(db, 'students');
+  return onSnapshot(
+    q,
+    (snap) => {
+      const allStudents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let matched = allStudents.filter(s => 
+        (parentId && (s.parentId === parentId || s.parentUid === parentId)) ||
+        (parentEmail && s.parentEmail?.toLowerCase() === parentEmail?.toLowerCase())
+      );
+
+      // If no Firestore records found yet, check INITIAL_STUDENTS for matching email or demo fallback
+      if (matched.length === 0 && (parentEmail || parentId)) {
+        const fallbackMatched = INITIAL_STUDENTS.filter(s =>
+          (parentEmail && s.parentEmail?.toLowerCase() === parentEmail?.toLowerCase()) ||
+          (parentId && (s.parentId === parentId || s.parentUid === parentId))
+        );
+        if (fallbackMatched.length > 0) {
+          matched = fallbackMatched;
+        }
+      }
+
+      callback(matched);
+    },
+    (err) => {
+      console.warn('subscribeParentStudents error:', err);
+      const fallbackMatched = INITIAL_STUDENTS.filter(s =>
+        (parentEmail && s.parentEmail?.toLowerCase() === parentEmail?.toLowerCase()) ||
+        (parentId && s.parentId === parentId)
+      );
+      callback(fallbackMatched);
+    }
+  );
+}
+
+export function subscribeInstitutionStudents(institutionId, callback) {
+  if (!institutionId) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = collection(db, 'students');
+  return onSnapshot(
+    q,
+    (snap) => {
+      let students = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(s => s.institutionId === institutionId);
+
+      if (students.length === 0) {
+        students = INITIAL_STUDENTS.filter(s => s.institutionId === institutionId);
+      }
+      callback(students);
+    },
+    (err) => {
+      console.warn('subscribeInstitutionStudents note:', err);
+      callback(INITIAL_STUDENTS.filter(s => s.institutionId === institutionId));
+    }
+  );
+}
+
+export async function saveStudentAssociation(studentData) {
+  const studentId = studentData.id || ('STU-' + Date.now());
+  const now = Date.now();
+  const payload = {
+    ...studentData,
+    id: studentId,
+    updatedAt: now
+  };
+  if (!studentData.id) {
+    payload.createdAt = now;
+  }
+  await setDoc(doc(db, 'students', studentId), payload, { merge: true });
+  return payload;
+}

@@ -45,7 +45,7 @@ export default function CommunicationPanel({ currentUser, busData, onClose }) {
       const messagesRef = ref(database, `messages/${busId}`);
       await push(messagesRef, {
         senderId: currentUser?.uid || 'user-1',
-        senderName: currentUser?.name || (isDriver ? 'Rajesh Kumar' : 'Demo Parent'),
+        senderName: currentUser?.name || (isDriver ? 'Driver' : 'Parent'),
         senderRole: role,
         message: text.trim(),
         timestamp: Date.now(),
@@ -83,9 +83,9 @@ export default function CommunicationPanel({ currentUser, busData, onClose }) {
         <div className="drawer-title">
           <MessageSquare size={20} color="#2563eb" />
           <div>
-            <h3>{busData?.busNumber || 'Bus 24'} Communication</h3>
+            <h3>{busData?.busNumber || 'Bus'} Communication</h3>
             <span className="drawer-sub">
-              {isDriver ? 'Broadcast to Parents' : `Contact Driver (${busData?.driverName || 'Rajesh Kumar'})`}
+              {isDriver ? 'Broadcast to Parents' : `Contact Driver (${busData?.driverName || 'Assigned Driver'})`}
             </span>
           </div>
         </div>
