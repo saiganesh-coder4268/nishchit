@@ -1,164 +1,167 @@
-# NISHCHIT 🚌
-### Live School & College Bus Tracking + Driver–Parent Communication
+# NISHCHIT 🚌 — Certainty for Every Parent
+### Unified Transport Operating System + Driver Marketplace + Real-Time Fleet Radar
 
 > **"Know when the bus starts. Know where it is."**  
-> *No student phone. No phone call. No guessing.*
+> *Zero student phone dependency. Zero calling while driving. Complete operational certainty.*
 
-Nishchit is a responsive web application that creates a direct real-time certainty layer between school/college bus drivers and parents without requiring students to carry personal phones.
+[![Live App on Vercel](https://img.shields.io/badge/Vercel-Deployed%20Live-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://nishchit-app.vercel.app)
+[![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%2B%20RTDB-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://console.firebase.google.com/project/nishchit-eb118/overview)
+[![Vite](https://img.shields.io/badge/Vite-Production%20Ready-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev)
+[![Google Maps](https://img.shields.io/badge/Google%20Maps-Live%20Telemetry-4285F4?style=for-the-badge&logo=google-maps&logoColor=white)](https://developers.google.com/maps)
+
+---
+
+## 🌐 Live Production Deployment
+
+- 🚀 **Live Web App**: [https://nishchit-app.vercel.app](https://nishchit-app.vercel.app)
+- 🏫 **Institution Operations Desk**: [https://nishchit-app.vercel.app/institution/login](https://nishchit-app.vercel.app/institution/login)
+- 👨‍✈️ **Driver Cockpit & Marketplace**: [https://nishchit-app.vercel.app/driver/login](https://nishchit-app.vercel.app/driver/login)
+- 👨‍👩‍👧 **Parent Live Radar**: [https://nishchit-app.vercel.app/parent/login](https://nishchit-app.vercel.app/parent/login)
+- 🛡️ **Platform Administrator**: [https://nishchit-app.vercel.app/platform-admin/login](https://nishchit-app.vercel.app/platform-admin/login)
+- 💻 **GitHub Repository**: [https://github.com/saiganesh-coder4268/nishchit](https://github.com/saiganesh-coder4268/nishchit)
 
 ---
 
 ## 📌 Problem Statement
 
-In many school and junior-college transport systems across India, parents face constant uncertainty:
-- Has the bus actually started from school?
-- Is the bus delayed in traffic or stopped?
-- Where is the bus right now?
-
-Calling the driver while driving is dangerous and unreliable, and most school/intermediate students do not carry personal smartphones.
-
----
-
-## 💡 Solution
-
-Nishchit establishes a direct, real-time tracking pipeline:
-
-$$\text{DRIVER DEVICE (GPS / Demo Route)} \longrightarrow \text{FIREBASE REALTIME DB} \longrightarrow \text{GOOGLE MAPS LIVE MAP (Parent View)}$$
-
-1. **Driver Starts Trip**: One-tap activation requests location or initiates simulated route movement.
-2. **Realtime Synchronization**: Bus coordinates and trip status stream live via Firebase Realtime Database.
-3. **Parent Visibility**: Linked parents see live status, relative update timestamps, and animated bus movement on a Google Maps interface.
-4. **Safety-First Communication**: Drivers can send one-tap predefined quick status updates ("Traffic Delay", "Running Late") without typing while driving.
+Every morning and evening across India's school and college transportation networks:
+1. **Parent Anxiety**: Parents repeatedly call drivers while buses are in motion, risking road accidents.
+2. **Student Phone Restrictions**: School students and intermediate college pupils do not and should not carry smartphones.
+3. **Institutional Blindspots**: Schools and colleges struggle with driver shortages, unverified commercial licenses, and manual attendance coordination.
+4. **Driver Disconnect**: Qualified heavy-passenger drivers lack an institutional hiring marketplace and a dedicated, distraction-free duty cockpit.
 
 ---
 
-## ✨ Features
+## 💡 The Nishchit Solution
 
-- 🔒 **Driver Authentication & Verification Badge**: Only verified driver accounts (`VERIFIED ✓`) can start a trip.
-- ⚡ **One-Tap Trip Activation**: Single button tap toggles bus status to `🟢 BUS IS LIVE`.
-- 📍 **Browser GPS & Realtime Google Maps**: Smoothly updates bus position on Google Maps JavaScript API with custom animated bus markers and InfoWindows.
-- 💬 **Driver-Parent Communication**: Realtime message feed with safe quick-status buttons for drivers.
-- 🛠️ **GPS Demo Mode**: Simulated urban Hyderabad route generator for indoor evaluation.
-- ⚠️ **Offline & Connection Detection**: Displays last known location timestamp when connection drops.
-- 📝 **Parent Issue Reporting**: Quick modal for reporting delays, non-movement, or emergency concerns.
-- 🤖 **Nishchit Transport Assistant**: Natural-language query widget powered by transport state data.
-
----
-
-## 🛠️ Tech Stack
-
-- **Frontend**: React (Vite), JavaScript, CSS3 Design System, React Router (`react-router-dom`), Lucide Icons (`lucide-react`)
-- **Maps**: Google Maps JavaScript API (`@react-google-maps/api`)
-- **Backend & Database**: Firebase Authentication, Firebase Realtime Database
-- **Location**: Browser Geolocation API (`navigator.geolocation.watchPosition`)
-- **Security**: Firebase Database Security Rules (`database.rules.json`)
-
----
-
-## 🏗️ High-Level Architecture
+Nishchit delivers an end-to-end transport operating ecosystem with strict architectural role separation:
 
 ```
-                               ┌───────────────────────────────────┐
-                               │       DRIVER DASHBOARD            │
-                               │   (Start Bus / Geolocation /      │
-                               │     Quick Status Broadcast)       │
-                               └─────────────────┬─────────────────┘
-                                                 │
-                                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           FIREBASE REALTIME DATABASE                             │
-│  buses/BUS24 ────────► status, latitude, longitude, accuracy, lastUpdated       │
-│  messages/BUS24 ──────► sender, message, timestamp                              │
-│  reports/ ────────────► parentId, type, description                             │
-└────────────────────────────────────────────────┬────────────────────────────────┘
-                                                 │
-                                                 ▼
-                               ┌───────────────────────────────────┐
-                               │        PARENT DASHBOARD           │
-                               │   (Google Maps Live Map, Realtime │
-                               │    Listener, Driver Communication)│
-                               └───────────────────────────────────┘
+                                  ┌───────────────────────────────┐
+                                  │   PLATFORM OPERATOR CONSOLE   │
+                                  │  (Verify Drivers/Institutions)│
+                                  └───────────────┬───────────────┘
+                                                  │
+                 ┌────────────────────────────────┴────────────────────────────────┐
+                 ▼                                                                 ▼
+   ┌───────────────────────────┐                                     ┌───────────────────────────┐
+   │ INSTITUTION COMMAND DESK  │ ◄────── [DRIVER MARKETPLACE] ─────► │  DRIVER OPERATING COCKPIT │
+   │ (Fleet, Routes, Incidents)│                                     │(Start Trip, GPS Telemetry)│
+   └─────────────┬─────────────┘                                     └─────────────┬─────────────┘
+                 │                                                                 │
+                 ▼                                                                 ▼
+   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+   │                            DUAL-TIER FIREBASE DATA LAYER                                    │
+   │  • Cloud Firestore: Fleet Buses, Verified Profiles, Job Pipeline, Route Corridors, Reports  │
+   │  • Realtime Database (RTDB): High-Frequency Hardware GPS Stream (~3s), Live Speed & Bearing │
+   └──────────────────────────────────────────────┬──────────────────────────────────────────────┘
+                                                  │
+                                                  ▼
+                                   ┌─────────────────────────────┐
+                                   │      PARENT LIVE RADAR      │
+                                   │ (Real-Time ETA, Next Stop,  │
+                                   │   Live Corridor Map Radar)  │
+                                   └─────────────────────────────┘
 ```
 
 ---
 
-## 🔑 Demo Accounts & Instant Access
+## 🏛️ Comprehensive Role Architecture
 
-Nishchit provides **Instant Demo Access** buttons on the landing page and login screens:
-
-### 🚌 Driver Account
-- **Email**: `driver@nishchit.app`
-- **Password**: `driver123`
-- **Driver**: Rajesh Kumar (`DRV001`)
-- **Bus / Route**: Bus 24 (`BUS24`) / Route 04 (`ROUTE04`)
-- **Status**: `VERIFIED ✓`
-
-### 👨‍👩‍👧 Parent Account
-- **Email**: `parent@nishchit.app`
-- **Password**: `parent123`
-- **Student**: Aarav (Class 8-A)
-- **Assigned Bus**: Bus 24 (`BUS24`)
+| Portal | Route | Key Capabilities |
+| :--- | :--- | :--- |
+| **Institution Transport Desk** | `/institution/dashboard` | Fleet vehicle manager, Corridor route builder, Incident reporting center, KPI telemetry bar (Buses, Live Now, Roster, Students, Open Positions), **Driver Marketplace** (Create jobs, invite drivers, review applications). |
+| **Driver Cockpit & Marketplace** | `/driver/dashboard` | Verification badge (`🟢 Platform Verified Driver`), assigned bus duty (`Bus 12`), touch-friendly `START TRIP` / `END TRIP`, real-time hardware GPS streaming, predefined safety broadcast buttons, job discovery board, and professional profile. |
+| **Parent Live Transit Radar** | `/parent/dashboard` | Clean, low-cognitive-load live bus tracking, real-time ETA countdown, next stop indicator, ordered corridor stop checklist, and driver message feed. |
+| **Platform Operator** | `/platform-admin/dashboard` | Ecosystem moderation, driving license & police verification approvals, educational institution verification, and corridor health telemetry. |
 
 ---
 
-## 🚀 Quick Setup & Installation
+## 📱 Mobile-First Engineering & Responsiveness
 
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/saiganesh-coder4268/nishchit.git
-   cd nishchit
-   ```
-
-2. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**:
-   Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   *The default Firebase configuration and Google Maps API Key are configured in `.env`.*
-
-4. **Run Development Server**:
-   ```bash
-   npm run dev
-   ```
-
-5. **Build for Production**:
-   ```bash
-   npm run build
-   ```
+Nishchit is engineered with high-density mobile viewports in mind:
+- **Responsive Flexbox Header**: School identity, verification badge, active bus counter, and quick-action buttons wrap cleanly on phone screens ($\le 640\text{px}$).
+- **Swipeable Horizontal Tabs**: Navigation tabs scroll with smooth native momentum and hidden scrollbars.
+- **Adaptive KPI Metrics Grid**: Dynamic 3-column / 2-column mobile cards preventing text truncation or overflow.
+- **Native Bottom-Sheet Modals**: Dialogs like *"Add Bus to Fleet"* and *"Log Incident"* adapt to bottom sheets on mobile devices with $\ge 44\text{px}$ touch targets and $16\text{px}$ inputs to eliminate mobile browser auto-zoom.
+- **Global Viewport Safety**: Strict `overflow-x: hidden` eliminating horizontal screen wobbling.
 
 ---
 
-## 🎬 End-to-End Demo Flow
+## 🔑 One-Tap Instant Demo Profiles
 
-To demonstrate Nishchit live during pitch or evaluation:
+No typing required — instant demo logins are available on every login portal:
 
-1. Open two browser windows or devices side-by-side.
-2. In Window 1: Log in as **Driver** (`driver@nishchit.app` / `driver123`) or click **Instant Driver Demo**.
-3. In Window 2: Log in as **Parent** (`parent@nishchit.app` / `parent123`) or click **Instant Parent Demo**.
-4. In Window 1 (Driver): Tap **START BUS**. The status updates to `🟢 LIVE`.
-5. In Window 2 (Parent): Observe status immediately switch to `🟢 LIVE`, relative update timestamp start ticking, and Google Maps marker pan smooth live position.
-6. In Window 1 (Driver): Tap **Traffic delay** quick announcement.
-7. In Window 2 (Parent): Open communication drawer or observe real-time message arrival.
-8. In Window 1 (Driver): Tap **END TRIP**.
-9. In Window 2 (Parent): Observe status transition to `TRIP COMPLETED`.
+### 1. 🏫 Institution Transport Desk
+- **Portal**: `/institution/login`
+- **Demo Option**: Click **"Enter Demo Desk: ABC International School"**
+- **Features**: Manage fleet (B-12, B-15, etc.), inspect Route 05, post driver openings, review applicants, log incidents.
+
+### 2. 🚌 Driver Cockpit
+- **Portal**: `/driver/login`
+- **Demo Option**: Click **"One-Tap Driver Cockpit: Ravi Kumar"**
+- **Features**: Assigned to **Bus 12** on Route 05. Tap **`START TRIP`** to stream live GPS telemetry and send status broadcasts.
+
+### 3. 👨‍👩‍👧 Parent Live Radar
+- **Portal**: `/parent/login`
+- **Demo Option**: Click **"Track Live Bus: Priya Sharma"**
+- **Features**: Live tracking of Bus 12 along the GITAM University $\rightarrow$ MVP Colony corridor with real-time ETA.
+
+### 4. 🛡️ Platform Operator
+- **Portal**: `/platform-admin/login`
+- **Demo Option**: Click **"Platform Operator Login"**
+- **Features**: Ecosystem-wide credential verification and compliance auditing.
 
 ---
 
-## 🛡️ Security & Verification Rules
+## 🛠️ Technology Stack
 
-- **Role-Based Access Control**: Drivers cannot access parent dashboards; parents cannot trigger driver start/end controls.
-- **Verification Status**: Only drivers with `verificationStatus === 'VERIFIED'` can activate a trip. Drivers cannot alter their own verification status.
-- **Firebase RTDB Rules (`database.rules.json`)**: Enforces authenticated role-based write limits for `buses/$busId` and `messages/$busId` nodes.
+- **Frontend Core**: React 19, Vite, React Router v7, Lucide Icons (`lucide-react`)
+- **Maps & GIS**: Google Maps JavaScript API (`@react-google-maps/api`), Leaflet / React Leaflet fallback
+- **Data & Telemetry**:
+  - **Cloud Firestore**: Authoritative persistent records, fleet registry, driver applications, routes, incidents.
+  - **Firebase Realtime Database**: Low-latency GPS coordinate stream (`liveLocations/`, `busLocations/`), safety broadcasts (`messages/`).
+- **Styling**: Vanilla CSS Design System with responsive tokens, glassmorphism, and mobile media queries.
+- **Hosting & CI/CD**: Vercel Git-integrated automatic deployment pipeline.
 
 ---
 
-## ⚠️ Known Limitations & Design Decisions
+## 🚀 Local Development Setup
 
-- **Demo Route Coordinates**: Simulated demo movement relies on a predefined 6-point urban route loop for indoor/classroom demonstrations when physical GPS is unavailable.
-- **No Student Device**: Nishchit intentionally operates without student smartphone dependencies or student tracking tags.
+```bash
+# 1. Clone the repository
+git clone https://github.com/saiganesh-coder4268/nishchit.git
+cd nishchit
 
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment variables (optional, production fallbacks included)
+cp .env.example .env
+
+# 4. Start the local development server
+npm run dev
+
+# 5. Build and validate production bundle
+npm run build
+```
+
+---
+
+## 🛡️ Firebase Security Rules
+
+Security rules are configured and deployed to Firebase project `nishchit-eb118`:
+- `firestore.rules`: Enables verified read/write access across `buses`, `routes`, `trips`, `tripHistory`, `reports`, `driverProfiles`, and `jobPostings`.
+- `database.rules.json`: Provides open read/write streaming for live GPS coordinates (`liveLocations/`, `busLocations/`) and route broadcasts (`messages/`).
+
+Deploy rules anytime via Firebase CLI:
+```bash
+npx firebase deploy --only firestore:rules,database
+```
+
+---
+
+## 📄 License & Attribution
+
+Built for the **Educational Corridor Transport Initiative** across Andhra Pradesh (Vijayawada – Visakhapatnam corridor).  
+Developed with precision by **Saiganesh Palos** & the Nishchit engineering team.
