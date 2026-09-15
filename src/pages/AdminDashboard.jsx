@@ -22,7 +22,8 @@ import {
   subscribeSchedules,
   createSchedule,
   updateSchedule,
-  deleteSchedule
+  deleteSchedule,
+  seedDemoCorridorData
 } from '../services/transportService';
 import { REGISTERED_INSTITUTIONS } from '../data/regionData';
 import {
@@ -198,6 +199,16 @@ export default function AdminDashboard() {
   const showFeedback = (msg) => {
     setActionNotice(msg);
     setTimeout(() => setActionNotice(null), 3500);
+  };
+
+  const handleSeedCorridors = async () => {
+    try {
+      showFeedback('Initializing Andhra University baseline corridors and fleet in Firestore...');
+      await seedDemoCorridorData();
+      showFeedback('Baseline corridors and fleet initialized in Firestore successfully.');
+    } catch (e) {
+      showFeedback(`Seed error: ${e.message}`);
+    }
   };
 
   // Approved drivers pool for scheduling
@@ -466,6 +477,27 @@ export default function AdminDashboard() {
             <span>{actionNotice}</span>
           </div>
         )}
+
+        {/* Institution Command Header & Seed Action */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              {currentInstitution.name} Transport Desk
+            </h1>
+            <p style={{ fontSize: '0.84rem', color: '#64748B', margin: '3px 0 0 0' }}>
+              Real-time fleet operations, driver licensing approvals, and corridor scheduling.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSeedCorridors}
+            className="secondary-btn"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', padding: '8px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}
+          >
+            <Building2 size={15} color="#2563EB" />
+            <span>Seed Baseline AU Corridors</span>
+          </button>
+        </div>
 
       {/* 2. STATS & OPERATIONAL METRICS */}
       <div className="admin-metrics-grid four-col-metrics">

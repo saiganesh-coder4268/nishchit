@@ -9,7 +9,9 @@ import { auth } from '../firebase';
 import {
   getUserProfile,
   saveUserProfile,
-  subscribeUserProfile
+  subscribeUserProfile,
+  getDriverProfile,
+  getParentStudentTransport
 } from '../services/transportService';
 import { REGISTERED_INSTITUTIONS, INITIAL_VERIFIED_DRIVERS } from '../data/regionData';
 
@@ -91,36 +93,69 @@ export function AuthProvider({ children }) {
         // Real-time synchronization with user document in Firestore
         unsubProfile = subscribeUserProfile(firebaseUser.uid, async (profile) => {
           if (profile) {
-            setCurrentUser({
-              ...profile,
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || profile.email
-            });
+            if (profile.role === 'driver') {
+              const driverData = await getDriverProfile(firebaseUser.uid);
+              setCurrentUser({
+                ...profile,
+                ...(driverData || {}),
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || profile.email
+              });
+            } else if (profile.role === 'parent') {
+              const studentData = await getParentStudentTransport(firebaseUser.uid);
+              setCurrentUser({
+                ...profile,
+                ...(studentData || {}),
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || profile.email
+              });
+            } else {
+              setCurrentUser({
+                ...profile,
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || profile.email
+              });
+            }
           } else {
-            // Honor the intended role (driver or parent) set during sign-in
+            // Check intended role set during sign-in
             let intendedRole = 'parent';
             try {
               intendedRole = sessionStorage.getItem('nishchit_auth_role') || 'parent';
             } catch {}
 
-            const newProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              role: intendedRole,
-              status: intendedRole === 'driver' ? 'pending' : 'active',
-              verificationStatus: intendedRole === 'driver' ? 'pending' : 'approved',
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            };
-
-            try {
-              await saveUserProfile(firebaseUser.uid, newProfile);
-            } catch (err) {
-              console.warn('Initial profile sync note:', err);
+            if (intendedRole === 'driver') {
+              // Unregistered driver state - prompt registration form before creating Firestore document
+              setCurrentUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Driver',
+                fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Driver',
+                role: 'driver',
+                status: 'unregistered',
+                verificationStatus: 'unregistered',
+                isNewUser: true,
+                needsDriverRegistration: true
+              });
+            } else {
+              const newParentProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Parent',
+                fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Parent',
+                role: 'parent',
+                status: 'active',
+                isNewUser: true,
+                needsStudentLink: true,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+              };
+              try {
+                await saveUserProfile(firebaseUser.uid, newParentProfile);
+              } catch (err) {
+                console.warn('Initial parent profile sync note:', err);
+              }
+              setCurrentUser(newParentProfile);
             }
-            setCurrentUser(newProfile);
           }
           setLoading(false);
         });
@@ -179,16 +214,19 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Primary user authentication method for Parent and Driver.
+   * Primary user authentication method for Parent, Driver, and Admin.
+   * Real Google Authentication backed by Firestore users/{uid} profile.
    */
-  const loginWithGoogle = async (preferredRole = 'parent') => {
+  const loginWithGoogle = async (targetPortal = 'parent') => {
     try {
-      sessionStorage.setItem('nishchit_auth_role', preferredRole);
+      sessionStorage.setItem('nishchit_auth_role', targetPortal);
     } catch {}
 
-    // Clear any previous admin session
+    // Clear any previous demo sessions
     try {
       localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      localStorage.removeItem(USER_SESSION_STORAGE_KEY);
+      localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
     } catch {
       // Ignore
     }
@@ -197,47 +235,139 @@ export function AuthProvider({ children }) {
     provider.setCustomParameters({ prompt: 'select_account' });
     const res = await signInWithPopup(auth, provider);
     const user = res.user;
+    const now = Date.now();
 
+    // Query Firestore for existing profile
     let profile = await getUserProfile(user.uid);
-    if (!profile) {
-      profile = {
-        uid: user.uid,
-        email: user.email,
-        name: user.displayName || user.email.split('@')[0],
-        fullName: user.displayName || user.email.split('@')[0],
-        role: preferredRole,
-        status: preferredRole === 'driver' ? 'pending' : 'active',
-        verificationStatus: preferredRole === 'driver' ? 'pending' : 'approved',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      try {
-        await saveUserProfile(user.uid, profile);
-      } catch (e) {
-        console.warn('Profile save note:', e);
-      }
-    } else if (preferredRole && profile.role !== preferredRole) {
-      // Allow seamless demo switching between driver and parent with the same Google email
-      profile.role = preferredRole;
-      if (preferredRole === 'driver' && !profile.verificationStatus) {
-        profile.status = 'pending';
-        profile.verificationStatus = 'pending';
-      }
-      try {
-        await saveUserProfile(user.uid, {
-          role: preferredRole,
-          ...(preferredRole === 'driver' ? {
-            status: profile.status || 'pending',
-            verificationStatus: profile.verificationStatus || 'pending'
-          } : {})
-        });
-      } catch (e) {
-        console.warn('Role switch note:', e);
-      }
-    }
 
-    setCurrentUser(profile);
-    return profile;
+    if (!profile) {
+      // -------------------------------------------------------------
+      // 1. BRAND NEW USER (First time Google sign-in)
+      // -------------------------------------------------------------
+      if (targetPortal === 'parent') {
+        profile = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'Parent',
+          name: user.displayName || user.email?.split('@')[0] || 'Parent',
+          fullName: user.displayName || user.email?.split('@')[0] || 'Parent',
+          photoURL: user.photoURL || '',
+          role: 'parent',
+          status: 'active',
+          isNewUser: true,
+          needsStudentLink: true,
+          createdAt: now,
+          updatedAt: now
+        };
+        try {
+          await saveUserProfile(user.uid, profile);
+        } catch (e) {
+          console.warn('Parent initial profile save note:', e);
+        }
+        setCurrentUser(profile);
+        return profile;
+      } else if (targetPortal === 'driver') {
+        // New driver must submit registration & verification before receiving active access
+        const pendingDriverState = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'Driver',
+          name: user.displayName || user.email?.split('@')[0] || 'Driver',
+          fullName: user.displayName || user.email?.split('@')[0] || 'Driver',
+          photoURL: user.photoURL || '',
+          role: 'driver',
+          status: 'unregistered',
+          verificationStatus: 'unregistered',
+          isNewUser: true,
+          needsDriverRegistration: true,
+          createdAt: now,
+          updatedAt: now
+        };
+        setCurrentUser(pendingDriverState);
+        return pendingDriverState;
+      } else if (targetPortal === 'admin') {
+        const adminAllowlist = ['admin@nishchit.app', 'palos.saiganesh@gmail.com', 'transport@andhrauniversity.edu.in'];
+        if (adminAllowlist.includes((user.email || '').toLowerCase())) {
+          profile = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || 'Transport Admin',
+            name: user.displayName || 'Transport Admin',
+            fullName: user.displayName || 'Transport Administrator',
+            role: 'admin',
+            status: 'active',
+            createdAt: now,
+            updatedAt: now
+          };
+          try {
+            await saveUserProfile(user.uid, profile);
+          } catch (e) {}
+          setCurrentUser(profile);
+          return profile;
+        } else {
+          await signOut(auth);
+          throw new Error('This Google account is not registered as an authorized Administrator.');
+        }
+      }
+    } else {
+      // -------------------------------------------------------------
+      // 2. EXISTING USER: ENFORCE ROLE SEPARATION & PREVENT ACCIDENTAL OVERWRITE
+      // -------------------------------------------------------------
+      const registeredRole = (profile.role || '').toLowerCase();
+
+      // Parent trying to log in via Driver portal
+      if (targetPortal === 'driver' && registeredRole === 'parent') {
+        await signOut(auth);
+        const err = new Error('This account is registered as a Parent account. Please use the Parent portal or sign in with your Driver account.');
+        err.code = 'WRONG_PORTAL_PARENT';
+        throw err;
+      }
+
+      // Driver trying to log in via Parent portal
+      if (targetPortal === 'parent' && registeredRole === 'driver') {
+        await signOut(auth);
+        const err = new Error('This account is registered as a Driver account. Please use the Driver portal or sign in with your Parent account.');
+        err.code = 'WRONG_PORTAL_DRIVER';
+        throw err;
+      }
+
+      // Unauthorized user trying to enter Admin portal
+      if (targetPortal === 'admin' && registeredRole !== 'admin' && registeredRole !== 'institution' && registeredRole !== 'platform_admin') {
+        await signOut(auth);
+        const err = new Error('This account is not authorized as an Administrator.');
+        err.code = 'UNAUTHORIZED_ADMIN';
+        throw err;
+      }
+
+      // Existing verified Driver
+      if (registeredRole === 'driver') {
+        const driverDoc = await getDriverProfile(user.uid);
+        const merged = {
+          ...profile,
+          ...(driverDoc || {}),
+          uid: user.uid,
+          email: user.email || profile.email
+        };
+        setCurrentUser(merged);
+        return merged;
+      }
+
+      // Existing Parent
+      if (registeredRole === 'parent') {
+        const studentLink = await getParentStudentTransport(user.uid);
+        const merged = {
+          ...profile,
+          ...(studentLink || {}),
+          uid: user.uid,
+          email: user.email || profile.email
+        };
+        setCurrentUser(merged);
+        return merged;
+      }
+
+      setCurrentUser(profile);
+      return profile;
+    }
   };
 
   const updateCurrentUserProfile = async (updates) => {

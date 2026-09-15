@@ -121,14 +121,10 @@ function AppContent() {
           <Route
             path="/parent/login"
             element={
-              currentUser?.role === 'parent' ? (
+              currentUser?.role === 'parent' && !currentUser?.needsStudentLink && currentUser?.busId ? (
                 <Navigate to="/parent/dashboard" replace />
-              ) : currentUser ? (
-                getAuthenticatedHome()
               ) : (
-                <AuthShell roleTitle="Parent / Guardian">
-                  <ParentLogin />
-                </AuthShell>
+                <LandingPage initialPortal="parent" />
               )
             }
           />
@@ -136,14 +132,10 @@ function AppContent() {
           <Route
             path="/driver/login"
             element={
-              currentUser?.role === 'driver' ? (
+              currentUser?.role === 'driver' && (currentUser?.verificationStatus || '').toLowerCase() === 'approved' && !currentUser?.needsDriverRegistration ? (
                 <Navigate to="/driver/dashboard" replace />
-              ) : currentUser ? (
-                getAuthenticatedHome()
               ) : (
-                <AuthShell roleTitle="Driver">
-                  <DriverLogin />
-                </AuthShell>
+                <LandingPage initialPortal="driver" />
               )
             }
           />
@@ -152,9 +144,7 @@ function AppContent() {
             path="/driver/onboarding"
             element={
               <ProtectedRoute allowedRole="driver" currentUser={currentUser} loading={loading}>
-                <AuthShell roleTitle="Driver Onboarding">
-                  <DriverOnboarding />
-                </AuthShell>
+                <LandingPage initialPortal="driver" />
               </ProtectedRoute>
             }
           />
@@ -164,12 +154,8 @@ function AppContent() {
             element={
               currentUser?.role === 'institution' || currentUser?.role === 'admin' ? (
                 <Navigate to="/institution/dashboard" replace />
-              ) : currentUser ? (
-                getAuthenticatedHome()
               ) : (
-                <AuthShell roleTitle="Institution Transport Desk">
-                  <InstitutionLogin />
-                </AuthShell>
+                <LandingPage initialPortal="admin" />
               )
             }
           />
@@ -179,12 +165,8 @@ function AppContent() {
             element={
               currentUser?.role === 'platform_admin' ? (
                 <Navigate to="/platform-admin/dashboard" replace />
-              ) : currentUser ? (
-                getAuthenticatedHome()
               ) : (
-                <AuthShell roleTitle="Platform Operator">
-                  <PlatformAdminLogin />
-                </AuthShell>
+                <LandingPage initialPortal="platform_admin" />
               )
             }
           />
@@ -195,12 +177,8 @@ function AppContent() {
             element={
               currentUser?.role === 'admin' || currentUser?.role === 'institution' ? (
                 <Navigate to="/admin/dashboard" replace />
-              ) : currentUser ? (
-                getAuthenticatedHome()
               ) : (
-                <AuthShell roleTitle="Institution Transport Admin">
-                  <AdminLogin />
-                </AuthShell>
+                <LandingPage initialPortal="admin" />
               )
             }
           />

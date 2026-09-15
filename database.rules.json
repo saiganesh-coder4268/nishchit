@@ -29,6 +29,10 @@
     "trips": {
       ".read": true,
       ".write": true
+    },
+    "liveTrips": {
+      ".read": true,
+      ".write": true
     }
   }
 }

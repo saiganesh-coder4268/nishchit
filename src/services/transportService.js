@@ -281,8 +281,13 @@ export async function submitDriverApplication(driverData) {
     rejectionReason: null
   };
 
-  // 1. Save application document in Firestore
+  // 1. Save application document in Firestore (both driverApplications and driverVerificationRequests)
   await setDoc(doc(db, 'driverApplications', appId), applicationPayload);
+  try {
+    await setDoc(doc(db, 'driverVerificationRequests', appId), applicationPayload);
+  } catch (e) {
+    console.warn('driverVerificationRequests sync note:', e);
+  }
 
   // 2. Update user profile
   await saveUserProfile(driverData.uid || appId, {
@@ -294,6 +299,8 @@ export async function submitDriverApplication(driverData) {
 
   return applicationPayload;
 }
+
+export const submitDriverVerificationRequest = submitDriverApplication;
 
 export function subscribeDriverApplications(callback, institutionId = null) {
   const q = collection(db, 'driverApplications');
@@ -314,7 +321,52 @@ export function subscribeDriverApplications(callback, institutionId = null) {
   );
 }
 
-export async function approveDriverApplication(appId, driverId, busId, routeId, adminUid = 'admin', options = {}) {
+export const subscribeDriverVerificationRequests = subscribeDriverApplications;
+
+export async function getDriverProfile(uid) {
+  if (!uid) return null;
+  try {
+    const snap = await getDoc(doc(db, 'drivers', uid));
+    if (snap.exists()) return { uid: snap.id, ...snap.data() };
+  } catch (e) {
+    console.warn('getDriverProfile note:', e);
+  }
+  return null;
+}
+
+export function subscribeDriverProfile(uid, callback) {
+  if (!uid) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(
+    doc(db, 'drivers', uid),
+    (snap) => {
+      callback(snap.exists() ? { uid: snap.id, ...snap.data() } : null);
+    },
+    (err) => {
+      console.warn('subscribeDriverProfile note:', err);
+      callback(null);
+    }
+  );
+}
+
+export async function approveDriverApplication(appId, arg2, arg3, arg4, arg5, arg6) {
+  let driverId, busId, routeId, adminUid, options;
+  if (typeof arg2 === 'object' && arg2 !== null) {
+    driverId = arg2.driverId || appId;
+    busId = arg2.busId;
+    routeId = arg2.routeId;
+    adminUid = arg2.approvedBy || arg2.adminUid || 'admin';
+    options = arg2;
+  } else {
+    driverId = arg2 || appId;
+    busId = arg3;
+    routeId = arg4;
+    adminUid = arg5 || 'admin';
+    options = arg6 || {};
+  }
+
   if (!busId || !routeId) {
     throw new Error('Both a valid Bus and Route must be explicitly assigned to approve driver.');
   }
@@ -360,7 +412,7 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
   const batch = writeBatch(db);
 
   // 1. Update application
-  batch.update(doc(db, 'driverApplications', appId), {
+  const appUpdateData = {
     status: 'approved',
     verificationStatus: 'approved',
     reviewedAt: now,
@@ -377,14 +429,20 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     institutionName,
     scheduleId: options.scheduleId || null,
     rejectionReason: null
-  });
+  };
+  batch.update(doc(db, 'driverApplications', appId), appUpdateData);
+  try {
+    batch.set(doc(db, 'driverVerificationRequests', appId), appUpdateData, { merge: true });
+  } catch (e) {
+    console.warn('driverVerificationRequests update note:', e);
+  }
 
   // 2. Update user profile
   batch.set(
     doc(db, 'users', targetUid),
     {
       role: 'driver',
-      status: 'approved',
+      status: 'active',
       verificationStatus: 'approved',
       reviewedAt: now,
       reviewedBy: adminUid,
@@ -406,7 +464,33 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     { merge: true }
   );
 
-  // 3. Update bus
+  // 3. Create or update driver profile document in drivers/{targetUid}
+  batch.set(
+    doc(db, 'drivers', targetUid),
+    {
+      uid: targetUid,
+      name: driverName,
+      fullName: driverName,
+      phone: driverPhone,
+      instituteId: institutionId,
+      instituteName,
+      assignedBusId: busId,
+      assignedBusNumber: busNumber,
+      assignedRouteId: routeId,
+      assignedRouteName: routeName,
+      busId,
+      busNumber,
+      routeId,
+      routeName,
+      verificationStatus: 'approved',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  // 4. Update bus
   batch.update(doc(db, 'buses', busId), {
     driverId: targetUid,
     driverName,
@@ -420,7 +504,7 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     updatedAt: now
   });
 
-  // 4. Update route
+  // 5. Update route
   batch.update(doc(db, 'routes', routeId), {
     driverId: targetUid,
     driverName,
@@ -435,6 +519,8 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
   await batch.commit();
 }
 
+export const approveDriverVerificationRequest = approveDriverApplication;
+
 export async function rejectDriverApplication(appId, driverId, rejectionReason, adminUid = 'admin') {
   const reasonText = (rejectionReason || '').trim();
   if (!reasonText) {
@@ -446,13 +532,20 @@ export async function rejectDriverApplication(appId, driverId, rejectionReason, 
 
   const batch = writeBatch(db);
 
-  batch.update(doc(db, 'driverApplications', appId), {
+  const rejectData = {
     status: 'rejected',
     verificationStatus: 'rejected',
     reviewedAt: now,
     reviewedBy: adminUid,
     rejectionReason: reasonText
-  });
+  };
+
+  batch.update(doc(db, 'driverApplications', appId), rejectData);
+  try {
+    batch.set(doc(db, 'driverVerificationRequests', appId), rejectData, { merge: true });
+  } catch (e) {
+    console.warn('driverVerificationRequests reject sync note:', e);
+  }
 
   batch.set(
     doc(db, 'users', targetUid),
@@ -472,6 +565,131 @@ export async function rejectDriverApplication(appId, driverId, rejectionReason, 
   );
 
   await batch.commit();
+}
+
+export const rejectDriverVerificationRequest = rejectDriverApplication;
+
+// ---------------------------------------------------------------------------
+// 3B. PARENT-STUDENT TRANSPORT LINKING
+// ---------------------------------------------------------------------------
+
+export async function linkParentStudentTransport(parentUid, studentData) {
+  if (!parentUid) throw new Error('Parent UID is required to link transport.');
+  const now = Date.now();
+  const recordId = `ps_${parentUid}`;
+  
+  const payload = {
+    id: recordId,
+    parentUid,
+    parentName: studentData.parentName || '',
+    parentEmail: studentData.parentEmail || '',
+    phone: studentData.phone || '',
+    studentName: studentData.studentName || '',
+    studentRelationship: studentData.studentRelationship || 'Parent',
+    instituteId: studentData.instituteId || 'INST-AU',
+    instituteName: studentData.instituteName || 'Andhra University',
+    routeId: studentData.routeId || '',
+    routeName: studentData.routeName || '',
+    busId: studentData.busId || '',
+    busNumber: studentData.busNumber || '',
+    stopName: studentData.stopName || '',
+    active: true,
+    updatedAt: now,
+    createdAt: now
+  };
+
+  // 1. Save to parentStudents collection
+  await setDoc(doc(db, 'parentStudents', recordId), payload, { merge: true });
+  
+  // 2. Save to parents collection
+  await setDoc(doc(db, 'parents', parentUid), payload, { merge: true });
+
+  // 3. Save to students collection for backwards compatibility
+  await setDoc(doc(db, 'students', recordId), {
+    id: recordId,
+    name: payload.studentName,
+    fullName: payload.studentName,
+    studentName: payload.studentName,
+    parentId: parentUid,
+    parentUid,
+    parentName: payload.parentName,
+    parentEmail: payload.parentEmail,
+    phone: payload.phone,
+    institutionId: payload.instituteId,
+    instituteId: payload.instituteId,
+    institutionName: payload.instituteName,
+    routeId: payload.routeId,
+    routeName: payload.routeName,
+    busId: payload.busId,
+    busNumber: payload.busNumber,
+    stopName: payload.stopName,
+    active: true,
+    updatedAt: now,
+    createdAt: now
+  }, { merge: true });
+
+  // 4. Update central users/{uid} document
+  await saveUserProfile(parentUid, {
+    role: 'parent',
+    status: 'active',
+    hasStudentLinked: true,
+    instituteId: payload.instituteId,
+    instituteName: payload.instituteName,
+    routeId: payload.routeId,
+    routeName: payload.routeName,
+    busId: payload.busId,
+    busNumber: payload.busNumber,
+    stopName: payload.stopName,
+    studentName: payload.studentName
+  });
+
+  return payload;
+}
+
+export async function getParentStudentTransport(parentUid) {
+  if (!parentUid) return null;
+  try {
+    const recordId = `ps_${parentUid}`;
+    const snap = await getDoc(doc(db, 'parentStudents', recordId));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() };
+    }
+    const pSnap = await getDoc(doc(db, 'parents', parentUid));
+    if (pSnap.exists()) {
+      return { id: pSnap.id, ...pSnap.data() };
+    }
+  } catch (e) {
+    console.warn('getParentStudentTransport note:', e);
+  }
+  return null;
+}
+
+export function subscribeParentStudentTransport(parentUid, callback) {
+  if (!parentUid) {
+    callback(null);
+    return () => {};
+  }
+  const recordId = `ps_${parentUid}`;
+  return onSnapshot(
+    doc(db, 'parentStudents', recordId),
+    (snap) => {
+      if (snap.exists()) {
+        callback({ id: snap.id, ...snap.data() });
+      } else {
+        getDoc(doc(db, 'parents', parentUid)).then(pSnap => {
+          if (pSnap.exists()) {
+            callback({ id: pSnap.id, ...pSnap.data() });
+          } else {
+            callback(null);
+          }
+        }).catch(() => callback(null));
+      }
+    },
+    (err) => {
+      console.warn('subscribeParentStudentTransport error:', err);
+      callback(null);
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -849,6 +1067,7 @@ export async function startDriverTrip(arg1, arg2, arg3) {
   };
 
   try {
+    await rtdbSet(rtdbRef(rtdb, `liveTrips/${tripId}`), rtdbPayload);
     await rtdbSet(rtdbRef(rtdb, `liveLocations/${tripId}`), rtdbPayload);
     await rtdbSet(rtdbRef(rtdb, `liveLocations/${busId}`), rtdbPayload);
     await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), rtdbPayload);
@@ -908,10 +1127,12 @@ export async function streamDriverGpsLocation(arg1, arg2) {
   try {
     // 1. High-frequency update to RTDB paths
     await rtdbSet(rtdbRef(rtdb, `liveLocations/${busId}`), updatePayload);
+    await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), updatePayload);
+    await rtdbSet(rtdbRef(rtdb, `liveTrips/${busId}`), updatePayload);
     if (tripId && tripId !== busId) {
       await rtdbSet(rtdbRef(rtdb, `liveLocations/${tripId}`), updatePayload);
+      await rtdbSet(rtdbRef(rtdb, `liveTrips/${tripId}`), updatePayload);
     }
-    await rtdbSet(rtdbRef(rtdb, `busLocations/${busId}`), updatePayload);
 
     // 2. Low-frequency throttle to Firestore
     if (now - lastFirestoreSync > 15000) {
@@ -1003,8 +1224,10 @@ export async function endDriverTrip(arg1, arg2, arg3) {
     try {
       await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${busId}`), { active: false, endedAt: now });
       await rtdbUpdate(rtdbRef(rtdb, `busLocations/${busId}`), { active: false, endedAt: now });
+      await rtdbUpdate(rtdbRef(rtdb, `liveTrips/${busId}`), { active: false, endedAt: now });
       if (tripId && tripId !== busId) {
         await rtdbUpdate(rtdbRef(rtdb, `liveLocations/${tripId}`), { active: false, endedAt: now });
+        await rtdbUpdate(rtdbRef(rtdb, `liveTrips/${tripId}`), { active: false, endedAt: now });
       }
 
       await rtdbPush(rtdbRef(rtdb, `messages/${busId}`), {
@@ -1031,16 +1254,23 @@ export function subscribeLiveLocation(tripIdOrBusId, callback) {
     return () => {};
   }
 
-  const tripRef = rtdbRef(rtdb, `liveLocations/${tripIdOrBusId}`);
+  const tripRef = rtdbRef(rtdb, `liveTrips/${tripIdOrBusId}`);
   const unsubTrip = rtdbOnValue(
     tripRef,
     (snap) => {
       if (snap.exists() && snap.val()?.active) {
         callback(snap.val());
       } else {
-        const busRef = rtdbRef(rtdb, `busLocations/${tripIdOrBusId}`);
-        rtdbGet(busRef).then((bSnap) => {
-          callback(bSnap.exists() ? bSnap.val() : null);
+        const locRef = rtdbRef(rtdb, `liveLocations/${tripIdOrBusId}`);
+        rtdbGet(locRef).then((lSnap) => {
+          if (lSnap.exists() && lSnap.val()?.active) {
+            callback(lSnap.val());
+          } else {
+            const busRef = rtdbRef(rtdb, `busLocations/${tripIdOrBusId}`);
+            rtdbGet(busRef).then((bSnap) => {
+              callback(bSnap.exists() ? bSnap.val() : null);
+            }).catch(() => callback(null));
+          }
         }).catch(() => callback(null));
       }
     },
@@ -1051,6 +1281,34 @@ export function subscribeLiveLocation(tripIdOrBusId, callback) {
   );
 
   return () => unsubTrip();
+}
+
+export const subscribeLiveTripLocation = subscribeLiveLocation;
+
+export function subscribeActiveTripByBus(busId, callback) {
+  if (!busId) {
+    callback(null);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'trips'),
+    where('busId', '==', busId),
+    where('status', '==', 'ACTIVE')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      if (!snap.empty) {
+        callback({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn('subscribeActiveTripByBus error:', err);
+      callback(null);
+    }
+  );
 }
 
 export function subscribeActiveTrips(callback, institutionId = null) {
