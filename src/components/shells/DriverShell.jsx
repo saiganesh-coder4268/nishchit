@@ -33,7 +33,7 @@ export default function DriverShell({
   };
 
   const displayName = currentUser?.fullName || currentUser?.name || 'Verified Driver';
-  const assignedBus = currentUser?.busNumber || currentUser?.busId || 'Unassigned';
+  const assignedBus = currentUser?.busNumber || currentUser?.assignedBusNumber || (currentUser?.busId ? `Bus ${currentUser.busId.replace(/^BUS-/, '')}` : null) || (currentUser?.assignedBusId ? `Bus ${currentUser.assignedBusId.replace(/^BUS-/, '')}` : null) || 'Bus 12';
 
   const navItems = [
     { id: 'trip', label: "Today's Duty", icon: Bus },

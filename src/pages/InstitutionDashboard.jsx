@@ -393,23 +393,13 @@ export default function InstitutionDashboard() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', flexDirection: 'column', color: '#0F172A' }}>
       
       {/* 1. TOP INSTITUTION COMMAND HEADER */}
-      <header style={{
-        background: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '12px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <header className="inst-header">
+        <div className="inst-header-brand">
           <NishchitLogo variant="compact" size={34} />
           <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {currentInstitution.name}
               </span>
               <span style={{
@@ -421,13 +411,14 @@ export default function InstitutionDashboard() {
                 background: '#ECFDF5',
                 color: '#059669',
                 fontSize: '0.72rem',
-                fontWeight: 700
+                fontWeight: 700,
+                whiteSpace: 'nowrap'
               }}>
                 <ShieldCheck size={13} />
                 <span>Platform Verified</span>
               </span>
             </div>
-            <div style={{ fontSize: '0.76rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ fontSize: '0.74rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               <Building2 size={12} />
               <span>{currentInstitution.campus || currentInstitution.city} • Institutional Transport OS</span>
             </div>
@@ -435,8 +426,8 @@ export default function InstitutionDashboard() {
         </div>
 
         {/* Status + Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
+        <div className="inst-header-actions">
+          <div className="active-badge" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
@@ -452,8 +443,8 @@ export default function InstitutionDashboard() {
               background: liveBusesCount > 0 ? '#2563EB' : '#94A3B8',
               boxShadow: liveBusesCount > 0 ? '0 0 8px rgba(37,99,235,0.6)' : 'none'
             }} />
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: liveBusesCount > 0 ? '#1D4ED8' : '#64748B' }}>
-              {liveBusesCount} Buses Active on Road
+            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: liveBusesCount > 0 ? '#1D4ED8' : '#64748B', whiteSpace: 'nowrap' }}>
+              {liveBusesCount} Active Buses
             </span>
           </div>
 
@@ -468,12 +459,13 @@ export default function InstitutionDashboard() {
               background: '#FEF2F2',
               border: '1px solid #FECACA',
               color: '#DC2626',
-              fontSize: '0.8rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
             }}
           >
-            <AlertTriangle size={15} />
+            <AlertTriangle size={14} />
             <span>Report Issue</span>
           </button>
 
@@ -489,9 +481,10 @@ export default function InstitutionDashboard() {
               background: '#F8FAFC',
               border: '1px solid #CBD5E1',
               color: '#475569',
-              fontSize: '0.8rem',
+              fontSize: '0.78rem',
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
             }}
           >
             <LogOut size={14} />
@@ -520,15 +513,8 @@ export default function InstitutionDashboard() {
       )}
 
       {/* 3. PRIMARY TOP-LEVEL KPI STATS BAR (SPEC SECTION 8) */}
-      <div style={{
-        background: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '14px 24px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-        gap: '12px'
-      }}>
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #2563EB', background: '#F8FAFC', borderRadius: '4px' }}>
+      <div className="inst-kpi-bar">
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #2563EB', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             ACTIVE BUSES
           </span>
@@ -537,7 +523,7 @@ export default function InstitutionDashboard() {
           </strong>
         </div>
 
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #10B981', background: '#F8FAFC', borderRadius: '4px' }}>
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #10B981', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             LIVE NOW (GPS)
           </span>
@@ -546,7 +532,7 @@ export default function InstitutionDashboard() {
           </strong>
         </div>
 
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #6366F1', background: '#F8FAFC', borderRadius: '4px' }}>
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #6366F1', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             DRIVERS ROSTER
           </span>
@@ -555,7 +541,7 @@ export default function InstitutionDashboard() {
           </strong>
         </div>
 
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #F59E0B', background: '#F8FAFC', borderRadius: '4px' }}>
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #F59E0B', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             STUDENTS
           </span>
@@ -564,7 +550,7 @@ export default function InstitutionDashboard() {
           </strong>
         </div>
 
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #EC4899', background: '#F8FAFC', borderRadius: '4px' }}>
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #EC4899', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             OPEN POSITIONS
           </span>
@@ -573,7 +559,7 @@ export default function InstitutionDashboard() {
           </strong>
         </div>
 
-        <div style={{ padding: '8px 14px', borderLeft: '3px solid #EF4444', background: '#F8FAFC', borderRadius: '4px' }}>
+        <div className="inst-kpi-card" style={{ padding: '8px 14px', borderLeft: '3px solid #EF4444', background: '#F8FAFC', borderRadius: '4px' }}>
           <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             INCIDENTS
           </span>
@@ -584,15 +570,7 @@ export default function InstitutionDashboard() {
       </div>
 
       {/* 4. NAVIGATION TABS (SPEC SECTION 9) */}
-      <div style={{
-        background: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '0 24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        overflowX: 'auto'
-      }}>
+      <div className="inst-tabs-bar">
         {[
           { id: 'overview', label: 'Overview', icon: TrendingUp },
           { id: 'live_fleet', label: 'Live Fleet Map', icon: Radio },
@@ -608,23 +586,13 @@ export default function InstitutionDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              className="inst-tab-button"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 16px',
-                background: 'none',
-                border: 'none',
                 borderBottom: `2.5px solid ${isActive ? '#2563EB' : 'transparent'}`,
-                color: isActive ? '#2563EB' : tab.highlight ? '#D97706' : '#64748B',
-                fontSize: '0.86rem',
-                fontWeight: isActive ? 700 : 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.15s ease'
+                color: isActive ? '#2563EB' : tab.highlight ? '#D97706' : '#64748B'
               }}
             >
-              <Icon size={16} color={isActive ? '#2563EB' : tab.highlight ? '#D97706' : '#64748B'} />
+              <Icon size={16} />
               <span>{tab.label}</span>
               {tab.highlight && (
                 <span style={{
@@ -1994,11 +1962,8 @@ export default function InstitutionDashboard() {
       {/* MODAL 1: ADD BUS */}
       {/* ==================================================================== */}
       {showAddBusModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px'
-        }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <div className="responsive-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowAddBusModal(false); }}>
+          <div className="responsive-modal-dialog">
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 4px 0' }}>Add Bus to Institution Fleet</h3>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '0 0 16px 0' }}>Register a new vehicle asset for route operations.</p>
 
@@ -2388,11 +2353,8 @@ export default function InstitutionDashboard() {
       {/* MODAL 6: LOG INCIDENT */}
       {/* ==================================================================== */}
       {showReportIncidentModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px'
-        }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <div className="responsive-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowReportIncidentModal(false); }}>
+          <div className="responsive-modal-dialog">
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 4px 0', color: '#DC2626' }}>Log Transport Incident</h3>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '0 0 16px 0' }}>Report operational issue or route exception.</p>
 

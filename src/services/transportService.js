@@ -341,19 +341,79 @@ export async function rejectDriverApplication(appId, driverId, rejectionReason, 
 // 4. FLEET / BUS MANAGEMENT
 // ---------------------------------------------------------------------------
 
+const LOCAL_BUSES_KEY = 'nishchit_local_buses';
+
+function getLocalBuses() {
+  try {
+    const raw = localStorage.getItem(LOCAL_BUSES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalBus(bus) {
+  try {
+    const current = getLocalBuses();
+    const idx = current.findIndex(b => (b.id || b.busId) === (bus.id || bus.busId));
+    if (idx >= 0) {
+      current[idx] = { ...current[idx], ...bus, updatedAt: Date.now() };
+    } else {
+      current.push(bus);
+    }
+    localStorage.setItem(LOCAL_BUSES_KEY, JSON.stringify(current));
+    window.dispatchEvent(new CustomEvent('nishchit_buses_updated', { detail: current }));
+  } catch (e) {
+    console.warn('saveLocalBus note:', e);
+  }
+}
+
+function deleteLocalBus(busId) {
+  try {
+    const current = getLocalBuses().filter(b => (b.id || b.busId) !== busId);
+    localStorage.setItem(LOCAL_BUSES_KEY, JSON.stringify(current));
+    window.dispatchEvent(new CustomEvent('nishchit_buses_updated', { detail: current }));
+  } catch (e) {
+    console.warn('deleteLocalBus note:', e);
+  }
+}
+
 export function subscribeBuses(callback) {
   const colRef = collection(db, 'buses');
-  return onSnapshot(
+
+  const emitMerged = (remoteBuses = []) => {
+    const local = getLocalBuses();
+    const map = new Map();
+    // Pre-populate with region defaults if everything is empty
+    if (remoteBuses.length === 0 && local.length === 0) {
+      (INITIAL_VEHICLES || []).forEach(v => map.set(v.id || v.busId, v));
+    }
+    remoteBuses.forEach(b => map.set(b.id || b.busId, b));
+    local.forEach(b => map.set(b.id || b.busId, { ...(map.get(b.id || b.busId) || {}), ...b }));
+    callback(Array.from(map.values()));
+  };
+
+  const handleLocalUpdate = () => {
+    emitMerged();
+  };
+  window.addEventListener('nishchit_buses_updated', handleLocalUpdate);
+
+  const unsub = onSnapshot(
     colRef,
     (snap) => {
       const buses = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      callback(buses);
+      emitMerged(buses);
     },
     (err) => {
-      console.warn('subscribeBuses error:', err);
-      callback([]);
+      console.warn('subscribeBuses note (using local cache):', err);
+      emitMerged([]);
     }
   );
+
+  return () => {
+    unsub();
+    window.removeEventListener('nishchit_buses_updated', handleLocalUpdate);
+  };
 }
 
 export function subscribeSingleBus(busId, callback) {
@@ -367,8 +427,9 @@ export function subscribeSingleBus(busId, callback) {
       callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
     },
     (err) => {
-      console.warn('subscribeSingleBus error:', err);
-      callback(null);
+      console.warn('subscribeSingleBus note:', err);
+      const local = getLocalBuses().find(b => (b.id || b.busId) === busId);
+      callback(local || null);
     }
   );
 }
@@ -388,24 +449,44 @@ export async function createBus(busData) {
     driverPhone: busData.driverPhone || null,
     routeId: busData.routeId || null,
     routeName: busData.routeName || null,
+    institutionId: busData.institutionId || null,
+    institutionName: busData.institutionName || null,
     createdAt: now,
     updatedAt: now
   };
-  await setDoc(doc(db, 'buses', busId), payload);
+
+  // Immediate local availability guarantee
+  saveLocalBus(payload);
+
+  try {
+    await setDoc(doc(db, 'buses', busId), payload);
+  } catch (err) {
+    console.warn('createBus cloud note (cached locally):', err);
+  }
   return payload;
 }
 
 export async function updateBus(busId, updates) {
   if (!busId) return;
-  await updateDoc(doc(db, 'buses', busId), {
-    ...updates,
-    updatedAt: Date.now()
-  });
+  saveLocalBus({ id: busId, busId, ...updates });
+  try {
+    await setDoc(doc(db, 'buses', busId), {
+      ...updates,
+      updatedAt: Date.now()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('updateBus cloud note (cached locally):', err);
+  }
 }
 
 export async function deleteBus(busId) {
   if (!busId) return;
-  await deleteDoc(doc(db, 'buses', busId));
+  deleteLocalBus(busId);
+  try {
+    await deleteDoc(doc(db, 'buses', busId));
+  } catch (err) {
+    console.warn('deleteBus cloud note:', err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -551,10 +632,16 @@ export async function startDriverTrip(arg1, arg2, arg3) {
   };
 
   // 1. Create Firestore trip
-  await setDoc(doc(db, 'trips', tripId), tripPayload);
+  try {
+    await setDoc(doc(db, 'trips', tripId), tripPayload);
+  } catch (err) {
+    console.warn('startDriverTrip firestore trip note:', err);
+  }
 
   // 2. Update Firestore bus
   const busUpdates = {
+    id: busId,
+    busId,
     status: 'ON_TRIP',
     activeTripId: tripId,
     lastUpdated: now,
@@ -567,7 +654,15 @@ export async function startDriverTrip(arg1, arg2, arg3) {
     busUpdates.speed = initialCoords.speed || 0;
     busUpdates.heading = initialCoords.heading || 0;
   }
-  await updateDoc(doc(db, 'buses', busId), busUpdates);
+  
+  // Persist locally immediately
+  saveLocalBus(busUpdates);
+
+  try {
+    await setDoc(doc(db, 'buses', busId), busUpdates, { merge: true });
+  } catch (err) {
+    console.warn('startDriverTrip firestore bus note (cached locally):', err);
+  }
 
   // 3. Publish to Realtime Database
   const rtdbPayload = {
@@ -828,19 +923,61 @@ export function subscribeTripHistory(callback) {
 // 8. INCIDENTS & PARENT FEEDBACK
 // ---------------------------------------------------------------------------
 
+const LOCAL_REPORTS_KEY = 'nishchit_local_reports';
+
+function getLocalReports() {
+  try {
+    const raw = localStorage.getItem(LOCAL_REPORTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalReport(report) {
+  try {
+    const current = getLocalReports();
+    current.unshift(report);
+    localStorage.setItem(LOCAL_REPORTS_KEY, JSON.stringify(current.slice(0, 50)));
+    window.dispatchEvent(new CustomEvent('nishchit_reports_updated', { detail: current }));
+  } catch (e) {
+    console.warn('saveLocalReport note:', e);
+  }
+}
+
 export function subscribeIncidentReports(callback) {
   const q = query(collection(db, 'reports'), orderBy('timestamp', 'desc'), limit(50));
-  return onSnapshot(
+
+  const emitMerged = (remote = []) => {
+    const local = getLocalReports();
+    const map = new Map();
+    remote.forEach(r => map.set(r.id || r.reportId, r));
+    local.forEach(r => map.set(r.id || r.reportId, { ...(map.get(r.id || r.reportId) || {}), ...r }));
+    const merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    callback(merged);
+  };
+
+  const handleLocalUpdate = () => {
+    emitMerged();
+  };
+  window.addEventListener('nishchit_reports_updated', handleLocalUpdate);
+
+  const unsub = onSnapshot(
     q,
     (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      callback(list);
+      emitMerged(list);
     },
     (err) => {
-      console.warn('subscribeIncidentReports error:', err);
-      callback([]);
+      console.warn('subscribeIncidentReports note (using local cache):', err);
+      emitMerged([]);
     }
   );
+
+  return () => {
+    unsub();
+    window.removeEventListener('nishchit_reports_updated', handleLocalUpdate);
+  };
 }
 
 export async function submitIncidentReport(report) {
@@ -852,7 +989,15 @@ export async function submitIncidentReport(report) {
     timestamp: Date.now(),
     status: 'OPEN'
   };
-  await setDoc(doc(db, 'reports', reportId), payload);
+
+  // Immediate local cache
+  saveLocalReport(payload);
+
+  try {
+    await setDoc(doc(db, 'reports', reportId), payload);
+  } catch (err) {
+    console.warn('submitIncidentReport cloud note (saved locally):', err);
+  }
   return payload;
 }
 

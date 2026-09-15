@@ -4436,7 +4436,188 @@ input, textarea, select {
   }
 }
 
+/* ==========================================================================
+   MOBILE SCREEN OPTIMIZATION & RESPONSIVENESS (SMARTPHONE VIEWPORTS <= 768px)
+   ========================================================================== */
 
+/* 1. Global Viewport & Layout Safety */
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  -webkit-tap-highlight-color: transparent;
+}
 
+.nishchit-app-shell {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
 
+/* 2. Responsive Institution Header */
+.inst-header {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 
+.inst-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.inst-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .inst-header {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .inst-header-brand {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .inst-header-actions {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid #F1F5F9;
+  }
+  .inst-header-actions button,
+  .inst-header-actions .active-badge {
+    font-size: 0.74rem !important;
+    padding: 6px 10px !important;
+  }
+}
+
+/* 3. Responsive KPI Metrics Bar */
+.inst-kpi-bar {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 12px 20px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 1024px) {
+  .inst-kpi-bar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .inst-kpi-bar {
+    padding: 10px 12px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .inst-kpi-card {
+    padding: 6px 8px !important;
+  }
+  .inst-kpi-card span {
+    font-size: 0.62rem !important;
+    letter-spacing: -0.02em;
+  }
+  .inst-kpi-card strong {
+    font-size: 1.15rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .inst-kpi-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 4. Horizontal Scrollable Tabs Bar */
+.inst-tabs-bar {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.inst-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.inst-tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+/* 5. Touch-Optimized Responsive Modals */
+.responsive-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.responsive-modal-dialog {
+  background: #FFFFFF;
+  border-radius: 20px;
+  width: min(94vw, 480px);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 22px 18px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .responsive-modal-backdrop {
+    padding: 12px;
+    align-items: flex-end; /* Native bottom-sheet feel on small mobile screens */
+  }
+  .responsive-modal-dialog {
+    width: 100%;
+    max-height: 86vh;
+    border-radius: 24px 24px 12px 12px;
+    padding: 20px 16px;
+  }
+  .responsive-modal-dialog input,
+  .responsive-modal-dialog select,
+  .responsive-modal-dialog textarea {
+    font-size: 16px !important; /* Prevents auto-zoom in mobile Safari and Chrome */
+    min-height: 44px;
+  }
+  .responsive-modal-dialog button {
+    min-height: 46px;
+  }
+}

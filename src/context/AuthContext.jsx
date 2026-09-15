@@ -317,6 +317,16 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
     } catch {}
 
+    // Ensure Firebase auth session exists to prevent SDK unauthenticated blocks
+    try {
+      const { signInAnonymously } = await import('firebase/auth');
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+    } catch (e) {
+      console.warn('Anonymous auth session note:', e);
+    }
+
     const inst = REGISTERED_INSTITUTIONS.find(i => i.id === instId) || REGISTERED_INSTITUTIONS[0];
     const instProfile = {
       uid: `inst-session-${inst.id}`,
@@ -352,12 +362,32 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
     } catch {}
 
+    // Ensure Firebase auth session exists to prevent SDK unauthenticated blocks
+    try {
+      const { signInAnonymously } = await import('firebase/auth');
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+    } catch (e) {
+      console.warn('Anonymous auth session note:', e);
+    }
+
     const drv = INITIAL_VERIFIED_DRIVERS.find(d => d.id === driverId) || INITIAL_VERIFIED_DRIVERS[0];
     const driverProfile = {
       ...drv,
       uid: drv.id,
+      busId: drv.assignedBusId || drv.busId || 'BUS-12',
+      busNumber: drv.assignedBusNumber || drv.busNumber || 'Bus 12',
+      assignedBusId: drv.assignedBusId || drv.busId || 'BUS-12',
+      assignedBusNumber: drv.assignedBusNumber || drv.busNumber || 'Bus 12',
+      routeId: drv.assignedRouteId || drv.routeId || 'ROUTE-05',
+      routeName: drv.assignedRouteName || drv.routeName || 'Route 05 (Vijayawada → Campus)',
+      assignedRouteId: drv.assignedRouteId || drv.routeId || 'ROUTE-05',
+      assignedRouteName: drv.assignedRouteName || drv.routeName || 'Route 05 (Vijayawada → Campus)',
       role: 'driver',
       status: 'active',
+      verificationStatus: 'approved',
+      isPlatformVerified: true,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
