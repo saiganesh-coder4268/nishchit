@@ -312,7 +312,7 @@ export function AuthProvider({ children }) {
   /**
    * Institution Administrator Authentication (School / College Transport Desk)
    */
-  const loginAsInstitutionDemo = async (instId = 'INST-ABC-SCHOOL') => {
+  const loginAsInstitutionDemo = async (instId = 'INST-AU') => {
     try {
       localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
     } catch {}
@@ -327,17 +327,19 @@ export function AuthProvider({ children }) {
       console.warn('Anonymous auth session note:', e);
     }
 
-    const inst = REGISTERED_INSTITUTIONS.find(i => i.id === instId) || REGISTERED_INSTITUTIONS[0];
+    const inst = REGISTERED_INSTITUTIONS.find(i => i.id === instId || i.instituteId === instId) || REGISTERED_INSTITUTIONS[0];
     const instProfile = {
       uid: `inst-session-${inst.id}`,
       id: inst.id,
-      email: `transport@${inst.id.toLowerCase().replace(/[^a-z0-9]/g, '')}.edu`,
-      name: `${inst.shortName} Desk`,
+      instituteId: inst.id,
+      email: `transport@${inst.id.toLowerCase().replace(/[^a-z0-9]/g, '')}.edu.in`,
+      name: `${inst.shortName || inst.name} Desk`,
       fullName: `${inst.name} Transport Controller`,
       role: 'institution',
       institutionId: inst.id,
       institutionName: inst.name,
-      district: inst.district,
+      city: inst.city,
+      state: inst.state,
       status: 'active',
       verificationStatus: 'verified',
       createdAt: Date.now(),
@@ -356,7 +358,7 @@ export function AuthProvider({ children }) {
   /**
    * Driver Authentication (Independent Profile & Operational Cockpit)
    */
-  const loginAsDriverDemo = async (driverId = 'DRV-RAVI-KUMAR') => {
+  const loginAsDriverDemo = async (driverId = 'DRV-SURESH-REDDY') => {
     try {
       localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
       localStorage.removeItem(PARENT_SESSION_STORAGE_KEY);
@@ -372,18 +374,33 @@ export function AuthProvider({ children }) {
       console.warn('Anonymous auth session note:', e);
     }
 
-    const drv = INITIAL_VERIFIED_DRIVERS.find(d => d.id === driverId) || INITIAL_VERIFIED_DRIVERS[0];
+    const drv = INITIAL_VERIFIED_DRIVERS.find(d => d.id === driverId) || INITIAL_VERIFIED_DRIVERS[0] || {
+      id: 'DRV-AU-DEMO',
+      name: 'Suresh Reddy',
+      fullName: 'Suresh Reddy',
+      phone: '+91 98480 12345',
+      experienceYears: '6',
+      assignedBusId: 'BUS-AU01',
+      assignedBusNumber: 'Bus AU01',
+      assignedRouteId: 'ROUTE-AU01',
+      assignedRouteName: 'Route AU01 (Gajuwaka → Andhra University)',
+      institutionId: 'INST-AU',
+      institutionName: 'Andhra University'
+    };
+
     const driverProfile = {
       ...drv,
       uid: drv.id,
-      busId: drv.assignedBusId || drv.busId || 'BUS-12',
-      busNumber: drv.assignedBusNumber || drv.busNumber || 'Bus 12',
-      assignedBusId: drv.assignedBusId || drv.busId || 'BUS-12',
-      assignedBusNumber: drv.assignedBusNumber || drv.busNumber || 'Bus 12',
-      routeId: drv.assignedRouteId || drv.routeId || 'ROUTE-05',
-      routeName: drv.assignedRouteName || drv.routeName || 'Route 05 (Vijayawada → Campus)',
-      assignedRouteId: drv.assignedRouteId || drv.routeId || 'ROUTE-05',
-      assignedRouteName: drv.assignedRouteName || drv.routeName || 'Route 05 (Vijayawada → Campus)',
+      busId: drv.assignedBusId || drv.busId || 'BUS-AU01',
+      busNumber: drv.assignedBusNumber || drv.busNumber || 'Bus AU01',
+      assignedBusId: drv.assignedBusId || drv.busId || 'BUS-AU01',
+      assignedBusNumber: drv.assignedBusNumber || drv.busNumber || 'Bus AU01',
+      routeId: drv.assignedRouteId || drv.routeId || 'ROUTE-AU01',
+      routeName: drv.assignedRouteName || drv.routeName || 'Route AU01 (Gajuwaka → Andhra University)',
+      assignedRouteId: drv.assignedRouteId || drv.routeId || 'ROUTE-AU01',
+      assignedRouteName: drv.assignedRouteName || drv.routeName || 'Route AU01 (Gajuwaka → Andhra University)',
+      institutionId: drv.institutionId || 'INST-AU',
+      institutionName: drv.institutionName || 'Andhra University',
       role: 'driver',
       status: 'active',
       verificationStatus: 'approved',
@@ -401,7 +418,7 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Demo parent authentication handler for instant evaluation of GITAM -> MVP Colony journey.
+   * Demo parent authentication handler for Andhra University -> Siripuram Circle journey.
    */
   const loginAsDemoParent = async () => {
     try {
@@ -414,14 +431,17 @@ export function AuthProvider({ children }) {
     const demoParentProfile = {
       uid: 'parent-demo-session',
       id: 'demo-parent',
-      email: 'parent@gitam.edu',
+      email: 'parent@andhrauniversity.edu.in',
       name: 'Priya Sharma',
       fullName: 'Priya Sharma',
       role: 'parent',
       status: 'active',
       verificationStatus: 'approved',
-      institutionId: 'GITAM',
-      institutionName: 'GITAM University, Visakhapatnam',
+      institutionId: 'INST-AU',
+      institutionName: 'Andhra University, Visakhapatnam',
+      stopName: 'Siripuram Circle',
+      busId: 'BUS-AU01',
+      routeId: 'ROUTE-AU01',
       createdAt: Date.now(),
       updatedAt: Date.now()
     };

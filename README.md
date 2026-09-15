@@ -94,23 +94,23 @@ No typing required — instant demo logins are available on every login portal:
 
 ### 1. 🏫 Institution Transport Desk
 - **Portal**: `/institution/login`
-- **Demo Option**: Click **"Enter Demo Desk: ABC International School"**
-- **Features**: Manage fleet (B-12, B-15, etc.), inspect Route 05, post driver openings, review applicants, log incidents.
+- **Demo Option**: Click **"Enter Demo Desk: Andhra University"**
+- **Features**: Scoped by Institution (`INST-AU`). Manage fleet (`BUS-AU01`, `BUS-AU02`), inspect Siripuram & AU corridors, post driver openings, review applicants, log incidents.
 
-### 2. 🚌 Driver Cockpit
+### 2. 🚌 Driver Cockpit & Real Hardware GPS
 - **Portal**: `/driver/login`
-- **Demo Option**: Click **"One-Tap Driver Cockpit: Ravi Kumar"**
-- **Features**: Assigned to **Bus 12** on Route 05. Tap **`START TRIP`** to stream live GPS telemetry and send status broadcasts.
+- **Demo Option**: Click **"One-Tap Driver Cockpit: Suresh Reddy"**
+- **Features**: Approved driver assigned to **`BUS-AU01`** on Route `ROUTE-AU01`. Requires platform assignment to unlock trip initiation. Prompts real hardware GPS (`navigator.geolocation`) on **`START TRIP`** — zero fake coordinates — and streams live telemetry to Firebase RTDB.
 
-### 3. 👨‍👩‍👧 Parent Live Radar
+### 3. 👨‍👩‍👧 Parent Live Radar & 2-Device Demonstration
 - **Portal**: `/parent/login`
-- **Demo Option**: Click **"Track Live Bus: Priya Sharma"**
-- **Features**: Live tracking of Bus 12 along the GITAM University $\rightarrow$ MVP Colony corridor with real-time ETA.
+- **Demo Option**: Click **"Track Live Bus: Anita Rao (AU Student Parent)"**
+- **Features**: Real-time live tracking of `BUS-AU01`. Real two-device demonstration mode: switch between **`Registered Stop`** and **`📍 Use My Current Location`** (ephemeral in-memory). Google Maps `DirectionsService` computes authentic road routing, live road distance remaining, and estimated travel time.
 
 ### 4. 🛡️ Platform Operator
 - **Portal**: `/platform-admin/login`
 - **Demo Option**: Click **"Platform Operator Login"**
-- **Features**: Ecosystem-wide credential verification and compliance auditing.
+- **Features**: Multi-institution verification (`INST-AU`, `INST-GITAM`, `INST-MVGR`), driver commercial heavy-license review, and ecosystem moderation.
 
 ---
 

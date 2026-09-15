@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -6,11 +6,20 @@ import {
   Upload, FileText, UserCheck, ArrowRight, ArrowLeft, Building2
 } from 'lucide-react';
 import { resolvePinCode, REGISTERED_INSTITUTIONS } from '../data/regionData';
-import { submitDriverApplication } from '../utils/transportService';
+import { submitDriverApplication, subscribeInstitutes } from '../services/transportService';
 
 export default function DriverOnboarding() {
   const { currentUser, updateCurrentUserProfile, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Dynamic institutes collection
+  const [institutesList, setInstitutesList] = useState(REGISTERED_INSTITUTIONS);
+  useEffect(() => {
+    const unsub = subscribeInstitutes((list) => {
+      if (list && list.length > 0) setInstitutesList(list);
+    });
+    return () => unsub();
+  }, []);
 
   // Wizard Steps:
   // 1 = Location / PIN Check
@@ -24,7 +33,7 @@ export default function DriverOnboarding() {
   // Form state
   const [pincode, setPincode] = useState(currentUser?.pincode || '');
   const [pinResult, setPinResult] = useState(() => currentUser?.pincode ? resolvePinCode(currentUser.pincode) : null);
-  const [selectedInstitution, setSelectedInstitution] = useState(currentUser?.institutionId || 'INST-MVGR');
+  const [selectedInstitution, setSelectedInstitution] = useState(currentUser?.institutionId || 'INST-AU');
 
   // KYC Fields
   const [fullName, setFullName] = useState(currentUser?.fullName || currentUser?.name || '');
@@ -86,7 +95,7 @@ export default function DriverOnboarding() {
     setLoading(true);
 
     try {
-      const instObj = REGISTERED_INSTITUTIONS.find(i => i.id === selectedInstitution) || REGISTERED_INSTITUTIONS[0];
+      const instObj = institutesList.find(i => (i.id || i.instituteId) === selectedInstitution) || institutesList[0];
       const payload = {
         uid: currentUser?.uid || 'DRV-' + Date.now(),
         fullName: fullName.trim(),
@@ -94,10 +103,11 @@ export default function DriverOnboarding() {
         phone: phone.trim(),
         email: currentUser?.email || 'driver@nishchit.app',
         pincode,
-        locality: pinResult?.locality || 'Vizianagaram City',
-        district: pinResult?.district || 'Vizianagaram',
-        institutionId: instObj.id,
-        institutionName: instObj.name,
+        locality: pinResult?.locality || instObj.location || 'Visakhapatnam',
+        district: pinResult?.district || instObj.city || 'Visakhapatnam',
+        institutionId: instObj.id || instObj.instituteId || 'INST-AU',
+        instituteId: instObj.id || instObj.instituteId || 'INST-AU',
+        institutionName: instObj.name || 'Andhra University',
         photoUrl: photoPreview,
         licenceNumber: licenceNumber.trim(),
         licenceValidity,
@@ -254,26 +264,26 @@ export default function DriverOnboarding() {
             </div>
 
             <div className="institution-select-grid">
-              {REGISTERED_INSTITUTIONS.map((inst) => (
+              {institutesList.map((inst) => (
                 <div 
-                  key={inst.id}
-                  className={`institution-card-choice ${selectedInstitution === inst.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedInstitution(inst.id)}
+                  key={inst.id || inst.instituteId}
+                  className={`institution-card-choice ${selectedInstitution === (inst.id || inst.instituteId) ? 'selected' : ''}`}
+                  onClick={() => setSelectedInstitution(inst.id || inst.instituteId)}
                 >
                   <div className="inst-radio">
                     <input 
                       type="radio" 
                       name="institution" 
-                      checked={selectedInstitution === inst.id} 
-                      onChange={() => setSelectedInstitution(inst.id)} 
+                      checked={selectedInstitution === (inst.id || inst.instituteId)} 
+                      onChange={() => setSelectedInstitution(inst.id || inst.instituteId)} 
                     />
                   </div>
                   <div className="inst-info">
                     <h4>{inst.name}</h4>
-                    <p className="inst-campus">{inst.campus}</p>
+                    <p className="inst-campus">{inst.campus || inst.location}</p>
                     <div className="inst-meta">
-                      <span className="badge-chip">{inst.district}</span>
-                      <span className="badge-chip-fleet">{inst.busesCount} Authorized Buses</span>
+                      <span className="badge-chip">{inst.city || inst.district}</span>
+                      <span className="badge-chip-fleet">{(inst.busesCount || 20)} Authorized Buses</span>
                     </div>
                   </div>
                 </div>

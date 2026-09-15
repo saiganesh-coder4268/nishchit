@@ -15,6 +15,8 @@ import {
   closeJobPosting,
   subscribeJobApplications,
   updateJobApplicationStatus,
+  subscribeDriverApplications,
+  approveDriverApplication,
   sendDriverInvitation,
   assignDriverAndRouteToBus,
   createBus,
@@ -35,23 +37,26 @@ import {
 export default function InstitutionDashboard() {
   const { currentUser, logout } = useAuth();
 
-  // Institution context
-  const institutionId = currentUser?.institutionId || 'INST-ABC-SCHOOL';
+  // Institution context - Scoped to selected institute (default: Andhra University)
+  const institutionId = currentUser?.institutionId || currentUser?.instituteId || 'INST-AU';
   const currentInstitution = useMemo(() => {
-    return REGISTERED_INSTITUTIONS.find(i => i.id === institutionId) || {
+    return REGISTERED_INSTITUTIONS.find(i => i.id === institutionId || i.instituteId === institutionId) || {
       id: institutionId,
-      name: currentUser?.institutionName || 'ABC International School',
-      shortName: 'ABC School',
-      campus: 'Vijayawada Campus',
-      city: 'Vijayawada',
-      busesCount: 24,
+      instituteId: institutionId,
+      name: currentUser?.institutionName || 'Andhra University',
+      shortName: 'Andhra University',
+      campus: 'Visakhapatnam Campus',
+      city: 'Visakhapatnam',
+      state: 'Andhra Pradesh',
+      busesCount: 18,
+      status: 'ACTIVE',
       verificationStatus: 'verified'
     };
   }, [institutionId, currentUser]);
 
   // Main Tabs: 'overview' | 'live_fleet' | 'buses' | 'drivers' | 'routes' | 'hiring' | 'incidents'
   const [activeTab, setActiveTab] = useState('overview');
-  // Hiring Subtabs: 'open_jobs' | 'find_drivers' | 'applications'
+  // Hiring Subtabs: 'open_jobs' | 'find_drivers' | 'applications' | 'onboarding_drivers'
   const [hiringSubTab, setHiringSubTab] = useState('open_jobs');
 
   // Realtime States
@@ -63,6 +68,7 @@ export default function InstitutionDashboard() {
   const [incidents, setIncidents] = useState([]);
   const [jobPostings, setJobPostings] = useState([]);
   const [jobApplications, setJobApplications] = useState([]);
+  const [driverApplicationsList, setDriverApplicationsList] = useState([]);
   const [selectedBusForMap, setSelectedBusForMap] = useState(null);
   const [actionNotice, setActionNotice] = useState(null);
 
@@ -80,6 +86,7 @@ export default function InstitutionDashboard() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDriverProfileModal, setShowDriverProfileModal] = useState(null);
   const [showReportIncidentModal, setShowReportIncidentModal] = useState(false);
+  const [showApproveDriverModal, setShowApproveDriverModal] = useState(null);
 
   // Form States
   const [selectedBusToAssign, setSelectedBusToAssign] = useState(null);
@@ -89,29 +96,29 @@ export default function InstitutionDashboard() {
   const [busForm, setBusForm] = useState({
     busNumber: '',
     registrationNumber: '',
-    capacity: 48,
-    model: 'Tata Marcopolo BS6',
+    capacity: 52,
+    model: 'Tata Starbus Ultra BS6',
     status: 'AVAILABLE'
   });
 
   const [routeForm, setRouteForm] = useState({
     routeName: '',
-    code: 'RT-06',
-    from: 'Benz Circle',
-    to: 'ABC Campus',
-    departureTime: '07:00 AM',
-    expectedArrival: '08:00 AM',
-    stopsText: 'Benz Circle, Ramavarappadu, Enikepadu, Nidamanuru, ABC Campus'
+    code: 'ROUTE-AU03',
+    from: 'Gajuwaka Junction',
+    to: 'AU North Campus',
+    departureTime: '07:30 AM',
+    expectedArrival: '08:45 AM',
+    stopsText: 'Gajuwaka Junction, NAD Junction, Maddilapalem, Siripuram Circle, AU North Campus'
   });
 
   const [jobForm, setJobForm] = useState({
-    title: 'School Bus Professional Driver',
+    title: 'University Transport Heavy Vehicle Driver',
     jobType: 'Full-time',
-    salaryRange: '₹26,000 - ₹30,000 / month',
-    experienceRequired: '3+ years',
+    salaryRange: '₹28,000 - ₹34,000 / month',
+    experienceRequired: '4+ years',
     vehicleType: 'Heavy Passenger Bus (PSV)',
-    workSchedule: 'Morning 06:30 AM - 09:30 AM & Afternoon 03:00 PM - 06:00 PM',
-    description: 'Safe transport of elementary & high school students on Vijayawada urban routes. Must have clean driving record.'
+    workSchedule: 'Morning 07:00 AM - 10:00 AM & Evening 04:30 PM - 07:30 PM',
+    description: 'Safe transit of students and faculty along designated Visakhapatnam corridors to Andhra University campus.'
   });
 
   const [selectedDriverToInvite, setSelectedDriverToInvite] = useState(null);
@@ -122,21 +129,21 @@ export default function InstitutionDashboard() {
     category: 'Delay',
     severity: 'Medium',
     busId: '',
-    description: 'Traffic congestion on National Highway causing 15 min delay.',
+    description: 'Traffic congestion on National Highway corridor causing 15 min delay.',
   });
 
-  // 1. Subscribe to data
+  // 1. Subscribe to scoped data for this institution
   useEffect(() => {
     const unsubBuses = subscribeBuses((data) => {
       setFleetList(data);
       if (data.length > 0 && !selectedBusForMap) {
         setSelectedBusForMap(data[0]);
       }
-    });
+    }, institutionId);
 
     const unsubRoutes = subscribeRoutes((data) => {
       setRoutesList(data);
-    });
+    }, institutionId);
 
     const unsubDrivers = subscribeDriverProfiles((data) => {
       setAllDrivers(data);
@@ -144,23 +151,27 @@ export default function InstitutionDashboard() {
 
     const unsubActiveTrips = subscribeActiveTrips((data) => {
       setActiveTrips(data);
-    });
+    }, institutionId);
 
     const unsubHistory = subscribeTripHistory((data) => {
       setTripHistory(data);
-    });
+    }, institutionId);
 
     const unsubIncidents = subscribeIncidentReports((data) => {
       setIncidents(data);
-    });
+    }, institutionId);
 
     const unsubJobs = subscribeJobPostings((data) => {
       setJobPostings(data);
-    });
+    }, institutionId);
 
     const unsubApps = subscribeJobApplications((data) => {
       setJobApplications(data);
-    });
+    }, institutionId);
+
+    const unsubDriverApps = subscribeDriverApplications((data) => {
+      setDriverApplicationsList(data);
+    }, institutionId);
 
     return () => {
       unsubBuses();
@@ -171,8 +182,9 @@ export default function InstitutionDashboard() {
       unsubIncidents();
       unsubJobs();
       unsubApps();
+      unsubDriverApps();
     };
-  }, []);
+  }, [institutionId]);
 
   // 2. Realtime GPS Stream for Selected Bus in Live Fleet
   useEffect(() => {
@@ -943,7 +955,7 @@ export default function InstitutionDashboard() {
                       </span>
                     </div>
                     <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
-                      Registration: {selectedBusForMap.registrationNumber || 'AP 16 TE 4421'} • Route: {selectedBusForMap.routeName || 'Benz Circle → Campus'}
+                      Registration: {selectedBusForMap.registrationNumber || selectedBusForMap.plateNumber || '--'} • Route: {selectedBusForMap.routeName || selectedBusForMap.route || 'Assigned Corridor'}
                     </span>
                   </div>
                 </div>
@@ -952,14 +964,14 @@ export default function InstitutionDashboard() {
                   <div>
                     <span style={{ display: 'block', fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>DRIVER</span>
                     <strong style={{ fontSize: '0.86rem', color: '#0F172A' }}>
-                      {selectedBusForMap.driverName || 'Ravi Kumar'}
+                      {selectedBusForMap.driverName || 'Assigned Driver'}
                     </strong>
                   </div>
 
                   <div>
                     <span style={{ display: 'block', fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>SPEED</span>
                     <strong style={{ fontSize: '0.86rem', color: '#0F172A' }}>
-                      {selectedBusForMap.speed ? `${Math.round(selectedBusForMap.speed)} km/h` : '38 km/h'}
+                      {selectedBusForMap.speed != null ? `${Math.round(selectedBusForMap.speed)} km/h` : '0 km/h'}
                     </strong>
                   </div>
 
@@ -1306,13 +1318,7 @@ export default function InstitutionDashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
               {routesList.map(route => {
-                const stops = route.stops || [
-                  { stopName: 'Benz Circle', sequence: 1 },
-                  { stopName: 'Ramavarappadu', sequence: 2 },
-                  { stopName: 'Enikepadu', sequence: 3 },
-                  { stopName: 'Nidamanuru', sequence: 4 },
-                  { stopName: 'Campus', sequence: 5 }
-                ];
+                const stops = route.stops || [];
 
                 return (
                   <div key={route.id} style={{
@@ -1328,10 +1334,10 @@ export default function InstitutionDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
                         <strong style={{ fontSize: '1rem', color: '#0F172A', display: 'block' }}>
-                          {route.routeName || route.name || 'Route 05'}
+                          {route.routeName || route.name || 'Corridor Route'}
                         </strong>
                         <span style={{ fontSize: '0.76rem', color: '#64748B' }}>
-                          {route.code || 'CORRIDOR'} • {route.from || 'Benz Circle'} → {route.to || 'Campus'}
+                          {route.code || 'CORRIDOR'} • {route.from || 'Origin'} → {route.to || 'Campus'}
                         </span>
                       </div>
                       <span style={{

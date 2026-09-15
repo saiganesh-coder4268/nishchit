@@ -35,8 +35,8 @@ export default function ParentLogin() {
   const [parentName, setParentName] = useState(currentUser?.fullName || currentUser?.name || '');
   const [studentName, setStudentName] = useState('');
   const [studentRollNo, setStudentRollNo] = useState('');
-  const [institutionId, setInstitutionId] = useState('INST-GITAM');
-  const [stopName, setStopName] = useState('MVP Colony');
+  const [institutionId, setInstitutionId] = useState('INST-AU');
+  const [stopName, setStopName] = useState('Siripuram Circle');
   const [assignedBusId, setAssignedBusId] = useState('');
 
   useEffect(() => {
@@ -325,7 +325,7 @@ export default function ParentLogin() {
             }}
           >
             <ShieldCheck size={16} color="#0284c7" />
-            <span>Demo: Explore GITAM → MVP Colony Journey</span>
+            <span>Demo: Explore Andhra University → Siripuram Circle Journey</span>
           </button>
 
           <p className="auth-supporting-text">

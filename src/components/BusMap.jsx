@@ -135,9 +135,37 @@ const getYellowBusMarkerIcon = (isLive) => {
   };
 };
 
+// Distinctive Parent Destination / User Location Marker
+const getParentLocationMarkerIcon = (label = 'Your Location') => {
+  const safeLabel = String(label).replace(/'/g, '').slice(0, 20);
+  const svg = `
+    <svg width="180" height="60" viewBox="0 0 180 60" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="pldest" x="-10%" y="-10%" width="125%" height="130%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.2"/>
+        </filter>
+      </defs>
+      <circle cx="20" cy="24" r="14" fill="#10B981" opacity="0.25"/>
+      <circle cx="20" cy="24" r="8" fill="#10B981" stroke="#FFFFFF" stroke-width="2.5" filter="url(#pldest)"/>
+      <rect x="36" y="8" width="136" height="32" rx="7" fill="#0F172A" filter="url(#pldest)"/>
+      <text x="46" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="9" font-weight="800" fill="#34D399" letter-spacing="0.5">DESTINATION</text>
+      <text x="46" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="11" font-weight="600" fill="#FFFFFF">${safeLabel}</text>
+    </svg>
+  `;
+  const hasMaps = typeof window !== 'undefined' && window.google && window.google.maps;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: hasMaps ? new window.google.maps.Size(180, 60) : undefined,
+    anchor: hasMaps ? new window.google.maps.Point(20, 24) : undefined
+  };
+};
+
 export default function BusMap({
   busData,
   busLocation,
+  driverCoords,
+  destinationCoords,
+  onRouteCalculated,
   focusTrigger = 0,
   isLive,
   busNumber,
@@ -193,9 +221,81 @@ export default function BusMap({
     .filter(s => isValidCoordinate(s.lat, s.lng))
     .map(s => ({ lat: Number(s.lat), lng: Number(s.lng) }));
 
-  // Fit bounds to all stops + current bus position
+  const [directionsPath, setDirectionsPath] = useState([]);
+  const directionsServiceRef = useRef(null);
+  const lastRouteKeyRef = useRef('');
+
+  const activeDriverLat = Number(driverCoords?.latitude ?? rawLat);
+  const activeDriverLng = Number(driverCoords?.longitude ?? rawLng);
+  const hasDriverFix = isValidCoordinate(activeDriverLat, activeDriverLng);
+
+  const activeDestLat = Number(destinationCoords?.latitude ?? destinationCoords?.lat);
+  const activeDestLng = Number(destinationCoords?.longitude ?? destinationCoords?.lng);
+  const hasDestFix = isValidCoordinate(activeDestLat, activeDestLng);
+
+  // Compute Authentic Google Maps Driving Route
+  useEffect(() => {
+    if (!isLoaded || typeof window === 'undefined' || !window.google || !window.google.maps) return;
+
+    if (!hasDriverFix || !hasDestFix) {
+      setDirectionsPath([]);
+      return;
+    }
+
+    // Rate-limit re-querying Directions API to substantial movements (>35m)
+    const routeKey = `${activeDriverLat.toFixed(3)}_${activeDriverLng.toFixed(3)}_${activeDestLat.toFixed(4)}_${activeDestLng.toFixed(4)}`;
+    if (lastRouteKeyRef.current === routeKey) return;
+
+    if (!directionsServiceRef.current) {
+      directionsServiceRef.current = new window.google.maps.DirectionsService();
+    }
+
+    directionsServiceRef.current.route(
+      {
+        origin: { lat: activeDriverLat, lng: activeDriverLng },
+        destination: { lat: activeDestLat, lng: activeDestLng },
+        travelMode: window.google.maps.TravelMode.DRIVING
+      },
+      (result, status) => {
+        if (status === window.google.maps.DirectionsStatus.OK && result?.routes?.[0]) {
+          lastRouteKeyRef.current = routeKey;
+          const route = result.routes[0];
+          const leg = route.legs?.[0];
+
+          // Extract dense authentic road polyline
+          const path = route.overview_path.map(pt => ({
+            lat: pt.lat(),
+            lng: pt.lng()
+          }));
+          setDirectionsPath(path);
+
+          if (onRouteCalculated && leg) {
+            onRouteCalculated({
+              distanceText: leg.distance?.text || '',
+              distanceMeters: leg.distance?.value || 0,
+              durationText: leg.duration?.text || '',
+              durationMinutes: Math.round((leg.duration?.value || 0) / 60),
+              startAddress: leg.start_address,
+              endAddress: leg.end_address
+            });
+          }
+
+          // Fit viewport to encompass the entire driving corridor smoothly
+          if (map) {
+            const bounds = new window.google.maps.LatLngBounds();
+            bounds.extend({ lat: activeDriverLat, lng: activeDriverLng });
+            bounds.extend({ lat: activeDestLat, lng: activeDestLng });
+            map.fitBounds(bounds, { top: 60, right: 30, bottom: 200, left: 30 });
+          }
+        }
+      }
+    );
+  }, [isLoaded, hasDriverFix, hasDestFix, activeDriverLat, activeDriverLng, activeDestLat, activeDestLng, map, onRouteCalculated]);
+
+  // Fit bounds to all stops + current bus position if no driving route active
   useEffect(() => {
     if (!map || typeof window === 'undefined' || !window.google || !window.google.maps) return;
+    if (directionsPath.length > 0) return; // directions route handles its own bounds
 
     if (!hasFittedBounds.current && polylineCoords.length > 0) {
       const bounds = new window.google.maps.LatLngBounds();
@@ -206,7 +306,7 @@ export default function BusMap({
       map.fitBounds(bounds, { top: 70, right: 30, bottom: 200, left: 30 });
       hasFittedBounds.current = true;
     }
-  }, [map, polylineCoords, hasValidBusCoords, rawLat, rawLng]);
+  }, [map, polylineCoords, hasValidBusCoords, rawLat, rawLng, directionsPath.length]);
 
   // Handle focus trigger or recenter
   const handleRecenter = () => {
@@ -315,16 +415,38 @@ export default function BusMap({
         onUnmount={onUnmount}
         options={transitMapOptions}
       >
-        {/* Route Polyline */}
-        {polylineCoords.length > 1 && (
+        {/* Driving Route Polyline (calculated road network geometry) */}
+        {directionsPath.length > 1 ? (
           <PolylineF
-            path={polylineCoords}
+            path={directionsPath}
             options={{
               strokeColor: '#2563EB',
-              strokeOpacity: 0.9,
-              strokeWeight: 5,
+              strokeOpacity: 0.95,
+              strokeWeight: 6,
               geodesic: true
             }}
+          />
+        ) : (
+          /* Corridor Polyline between stops */
+          polylineCoords.length > 1 && (
+            <PolylineF
+              path={polylineCoords}
+              options={{
+                strokeColor: '#2563EB',
+                strokeOpacity: 0.85,
+                strokeWeight: 5,
+                geodesic: true
+              }}
+            />
+          )
+        )}
+
+        {/* Parent / Destination Marker */}
+        {hasDestFix && (
+          <MarkerF
+            position={{ lat: activeDestLat, lng: activeDestLng }}
+            icon={getParentLocationMarkerIcon(destinationCoords?.label || 'Your Location')}
+            zIndex={18}
           />
         )}
 

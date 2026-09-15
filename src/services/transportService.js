@@ -31,24 +31,142 @@ import { INITIAL_VEHICLES, INITIAL_ROUTES, REGISTERED_INSTITUTIONS, INITIAL_JOBS
 import { isValidCoordinate } from '../utils/busStatus';
 
 // ---------------------------------------------------------------------------
-// 1. DATABASE BOOTSTRAP / SEED
+// 1. INSTITUTES ENTITY & DATABASE BOOTSTRAP
 // ---------------------------------------------------------------------------
 
+export const SUPPORTED_INSTITUTES = [
+  {
+    id: "INST-AU",
+    instituteId: "INST-AU",
+    institutionId: "INST-AU",
+    name: "Andhra University",
+    shortName: "Andhra University",
+    campus: "Waltair Uplands / Siripuram Campus, Visakhapatnam",
+    location: "Waltair Uplands, Siripuram",
+    city: "Visakhapatnam",
+    state: "Andhra Pradesh",
+    country: "India",
+    district: "Visakhapatnam",
+    pincode: "530003",
+    status: "ACTIVE",
+    busesCount: 28,
+    createdAt: 1700000000000
+  },
+  {
+    id: "INST-GITAM",
+    instituteId: "INST-GITAM",
+    institutionId: "INST-GITAM",
+    name: "GITAM (Deemed to be University)",
+    shortName: "GITAM University",
+    campus: "Rushikonda Campus, Visakhapatnam",
+    location: "Rushikonda",
+    city: "Visakhapatnam",
+    state: "Andhra Pradesh",
+    country: "India",
+    district: "Visakhapatnam",
+    pincode: "530045",
+    status: "ACTIVE",
+    busesCount: 35,
+    createdAt: 1700000000000
+  },
+  {
+    id: "INST-MVGR",
+    instituteId: "INST-MVGR",
+    institutionId: "INST-MVGR",
+    name: "MVGR College of Engineering (Autonomous)",
+    shortName: "MVGR College",
+    campus: "Chintalavalasa Campus, Vizianagaram",
+    location: "Chintalavalasa",
+    city: "Vizianagaram",
+    state: "Andhra Pradesh",
+    country: "India",
+    district: "Vizianagaram",
+    pincode: "535216",
+    status: "ACTIVE",
+    busesCount: 18,
+    createdAt: 1700000000000
+  }
+];
+
 /**
- * Production environment guarantee:
- * Never auto-seed fake or fallback data on application startup.
+ * Ensures supported institutes exist in Firestore 'institutes' collection.
+ */
+export async function ensureSupportedInstitutes() {
+  try {
+    for (const inst of SUPPORTED_INSTITUTES) {
+      await setDoc(doc(db, 'institutes', inst.id), {
+        ...inst,
+        updatedAt: Date.now()
+      }, { merge: true });
+    }
+  } catch (err) {
+    console.warn('ensureSupportedInstitutes note:', err);
+  }
+}
+
+/**
+ * Realtime subscription to supported active institutes in Firestore.
+ */
+export function subscribeInstitutes(callback) {
+  const colRef = collection(db, 'institutes');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      if (!snap.empty) {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status === 'ACTIVE');
+        callback(items);
+      } else {
+        callback(SUPPORTED_INSTITUTES);
+        ensureSupportedInstitutes();
+      }
+    },
+    (err) => {
+      console.warn('subscribeInstitutes note:', err);
+      callback(SUPPORTED_INSTITUTES);
+    }
+  );
+}
+
+export async function getInstitutes() {
+  try {
+    const snap = await getDocs(collection(db, 'institutes'));
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status === 'ACTIVE');
+    }
+  } catch (e) {
+    console.warn('getInstitutes note:', e);
+  }
+  return SUPPORTED_INSTITUTES;
+}
+
+export async function getInstitute(instituteId) {
+  if (!instituteId) return null;
+  try {
+    const snap = await getDoc(doc(db, 'institutes', instituteId));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() };
+    }
+  } catch (e) {
+    console.warn('getInstitute note:', e);
+  }
+  return SUPPORTED_INSTITUTES.find(i => i.id === instituteId || i.instituteId === instituteId) || null;
+}
+
+/**
+ * Bootstrap environment guarantee
  */
 export async function ensureInitialCorridorData() {
-  // Production safe: No automatic seeding of fake records.
+  await ensureSupportedInstitutes();
   return Promise.resolve();
 }
 
 /**
- * Explicit Developer / Administrative Seed Function
- * Only executed when explicitly invoked from admin dev tools, never during normal app boots.
+ * Explicit Administrative Seed Function
  */
 export async function seedDemoCorridorData() {
   try {
+    await ensureSupportedInstitutes();
+
     const busesSnap = await getDocs(collection(db, 'buses'));
     if (busesSnap.empty) {
       for (const bus of INITIAL_VEHICLES) {
@@ -177,13 +295,16 @@ export async function submitDriverApplication(driverData) {
   return applicationPayload;
 }
 
-export function subscribeDriverApplications(callback) {
+export function subscribeDriverApplications(callback, institutionId = null) {
   const q = collection(db, 'driverApplications');
   return onSnapshot(
     q,
     (snap) => {
-      const apps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let apps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       apps.sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0));
+      if (institutionId) {
+        apps = apps.filter(a => a.institutionId === institutionId || a.instituteId === institutionId);
+      }
       callback(apps);
     },
     (err) => {
@@ -193,13 +314,15 @@ export function subscribeDriverApplications(callback) {
   );
 }
 
-export async function approveDriverApplication(appId, driverId, busId, routeId, adminUid = 'admin') {
+export async function approveDriverApplication(appId, driverId, busId, routeId, adminUid = 'admin', options = {}) {
   if (!busId || !routeId) {
     throw new Error('Both a valid Bus and Route must be explicitly assigned to approve driver.');
   }
 
   const now = Date.now();
   const targetUid = driverId || appId;
+  const institutionId = options.institutionId || options.instituteId || 'INST-AU';
+  const institutionName = options.institutionName || 'Andhra University';
 
   // Verify bus exists
   const busSnap = await getDoc(doc(db, 'buses', busId));
@@ -249,6 +372,10 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     busNumber,
     registrationNumber,
     routeName,
+    institutionId,
+    instituteId: institutionId,
+    institutionName,
+    scheduleId: options.scheduleId || null,
     rejectionReason: null
   });
 
@@ -269,6 +396,10 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
       assignedRouteId: routeId,
       routeName,
       routeCode,
+      institutionId,
+      instituteId: institutionId,
+      institutionName,
+      scheduleId: options.scheduleId || null,
       rejectionReason: null,
       updatedAt: now
     },
@@ -282,6 +413,9 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     driverPhone,
     routeId,
     routeName,
+    institutionId,
+    instituteId: institutionId,
+    institutionName,
     status: 'ASSIGNED',
     updatedAt: now
   });
@@ -292,6 +426,9 @@ export async function approveDriverApplication(appId, driverId, busId, routeId, 
     driverName,
     busId,
     busNumber,
+    institutionId,
+    instituteId: institutionId,
+    institutionName,
     updatedAt: now
   });
 
@@ -378,7 +515,7 @@ function deleteLocalBus(busId) {
   }
 }
 
-export function subscribeBuses(callback) {
+export function subscribeBuses(callback, institutionId = null) {
   const colRef = collection(db, 'buses');
 
   const emitMerged = (remoteBuses = []) => {
@@ -390,7 +527,11 @@ export function subscribeBuses(callback) {
     }
     remoteBuses.forEach(b => map.set(b.id || b.busId, b));
     local.forEach(b => map.set(b.id || b.busId, { ...(map.get(b.id || b.busId) || {}), ...b }));
-    callback(Array.from(map.values()));
+    let list = Array.from(map.values());
+    if (institutionId) {
+      list = list.filter(b => b.institutionId === institutionId || b.instituteId === institutionId);
+    }
+    callback(list);
   };
 
   const handleLocalUpdate = () => {
@@ -437,11 +578,12 @@ export function subscribeSingleBus(busId, callback) {
 export async function createBus(busData) {
   const busId = busData.busId || busData.id || `BUS-${Date.now().toString().slice(-4)}`;
   const now = Date.now();
+  const institutionId = busData.institutionId || busData.instituteId || 'INST-AU';
   const payload = {
     id: busId,
     busId,
     busNumber: busData.busNumber || 'Bus New',
-    registrationNumber: busData.registrationNumber || 'AP 35 XX 0000',
+    registrationNumber: busData.registrationNumber || 'AP 31 AU 0000',
     capacity: Number(busData.capacity) || 52,
     status: busData.status || 'AVAILABLE',
     driverId: busData.driverId || null,
@@ -449,8 +591,9 @@ export async function createBus(busData) {
     driverPhone: busData.driverPhone || null,
     routeId: busData.routeId || null,
     routeName: busData.routeName || null,
-    institutionId: busData.institutionId || null,
-    institutionName: busData.institutionName || null,
+    institutionId,
+    instituteId: institutionId,
+    institutionName: busData.institutionName || 'Andhra University',
     createdAt: now,
     updatedAt: now
   };
@@ -493,17 +636,27 @@ export async function deleteBus(busId) {
 // 5. ROUTE MANAGEMENT
 // ---------------------------------------------------------------------------
 
-export function subscribeRoutes(callback) {
+export function subscribeRoutes(callback, institutionId = null) {
   const colRef = collection(db, 'routes');
   return onSnapshot(
     colRef,
     (snap) => {
-      const routes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let routes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (routes.length === 0) {
+        routes = INITIAL_ROUTES;
+      }
+      if (institutionId) {
+        routes = routes.filter(r => r.institutionId === institutionId || r.instituteId === institutionId);
+      }
       callback(routes);
     },
     (err) => {
       console.warn('subscribeRoutes error:', err);
-      callback([]);
+      let routes = INITIAL_ROUTES;
+      if (institutionId) {
+        routes = routes.filter(r => r.institutionId === institutionId || r.instituteId === institutionId);
+      }
+      callback(routes);
     }
   );
 }
@@ -528,6 +681,7 @@ export function subscribeSingleRoute(routeId, callback) {
 export async function createRoute(routeData) {
   const routeId = routeData.routeId || routeData.id || `ROUTE-${Date.now().toString().slice(-4)}`;
   const now = Date.now();
+  const institutionId = routeData.institutionId || routeData.instituteId || 'INST-AU';
   const payload = {
     id: routeId,
     routeId,
@@ -543,6 +697,9 @@ export async function createRoute(routeData) {
     busId: routeData.busId || null,
     driverId: routeData.driverId || null,
     driverName: routeData.driverName || null,
+    institutionId,
+    instituteId: institutionId,
+    institutionName: routeData.institutionName || 'Andhra University',
     status: routeData.status || 'ACTIVE',
     createdAt: now,
     updatedAt: now
@@ -612,9 +769,12 @@ export async function startDriverTrip(arg1, arg2, arg3) {
   const lat = hasGpsFix ? initialCoords.latitude : null;
   const lng = hasGpsFix ? initialCoords.longitude : null;
 
+  const institutionId = driverInfo.institutionId || driverInfo.instituteId || 'INST-AU';
   const tripPayload = {
     tripId,
     id: tripId,
+    institutionId,
+    instituteId: institutionId,
     driverId: driverInfo.uid || driverInfo.driverId || '',
     driverName: driverInfo.name || driverInfo.fullName || 'Assigned Driver',
     driverPhone: driverInfo.phone || '',
@@ -644,6 +804,8 @@ export async function startDriverTrip(arg1, arg2, arg3) {
     busId,
     status: 'ON_TRIP',
     activeTripId: tripId,
+    institutionId,
+    instituteId: institutionId,
     lastUpdated: now,
     updatedAt: now
   };
@@ -668,6 +830,8 @@ export async function startDriverTrip(arg1, arg2, arg3) {
   const rtdbPayload = {
     tripId,
     busId,
+    institutionId,
+    instituteId: institutionId,
     busNumber: tripPayload.busNumber,
     registrationNumber: tripPayload.registrationNumber,
     routeId: tripPayload.routeId,
@@ -889,12 +1053,15 @@ export function subscribeLiveLocation(tripIdOrBusId, callback) {
   return () => unsubTrip();
 }
 
-export function subscribeActiveTrips(callback) {
+export function subscribeActiveTrips(callback, institutionId = null) {
   const q = query(collection(db, 'trips'), where('status', '==', 'ACTIVE'));
   return onSnapshot(
     q,
     (snap) => {
-      const trips = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let trips = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (institutionId) {
+        trips = trips.filter(t => t.institutionId === institutionId || t.instituteId === institutionId);
+      }
       callback(trips);
     },
     (err) => {
@@ -904,12 +1071,15 @@ export function subscribeActiveTrips(callback) {
   );
 }
 
-export function subscribeTripHistory(callback) {
+export function subscribeTripHistory(callback, institutionId = null) {
   const q = query(collection(db, 'tripHistory'), orderBy('createdAt', 'desc'), limit(50));
   return onSnapshot(
     q,
     (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (institutionId) {
+        list = list.filter(t => t.institutionId === institutionId || t.instituteId === institutionId);
+      }
       callback(list);
     },
     (err) => {
@@ -945,7 +1115,7 @@ function saveLocalReport(report) {
   }
 }
 
-export function subscribeIncidentReports(callback) {
+export function subscribeIncidentReports(callback, institutionId = null) {
   const q = query(collection(db, 'reports'), orderBy('timestamp', 'desc'), limit(50));
 
   const emitMerged = (remote = []) => {
@@ -953,7 +1123,10 @@ export function subscribeIncidentReports(callback) {
     const map = new Map();
     remote.forEach(r => map.set(r.id || r.reportId, r));
     local.forEach(r => map.set(r.id || r.reportId, { ...(map.get(r.id || r.reportId) || {}), ...r }));
-    const merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    let merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    if (institutionId) {
+      merged = merged.filter(r => r.institutionId === institutionId || r.instituteId === institutionId);
+    }
     callback(merged);
   };
 
@@ -1080,13 +1253,16 @@ export async function assignDriverToBusAndRoute({ driverId, busId, routeId, sche
   }
 }
 
-export function subscribeSchedules(callback) {
+export function subscribeSchedules(callback, institutionId = null) {
   const colRef = collection(db, 'schedules');
   return onSnapshot(
     colRef,
     (snap) => {
-      const schedules = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let schedules = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       schedules.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      if (institutionId) {
+        schedules = schedules.filter(s => s.institutionId === institutionId || s.instituteId === institutionId);
+      }
       callback(schedules);
     },
     (err) => {
@@ -1099,9 +1275,12 @@ export function subscribeSchedules(callback) {
 export async function createSchedule(scheduleData) {
   const scheduleId = scheduleData.scheduleId || scheduleData.id || `SCHED-${Date.now().toString().slice(-6)}`;
   const now = Date.now();
+  const institutionId = scheduleData.institutionId || scheduleData.instituteId || 'INST-AU';
   const payload = {
     id: scheduleId,
     scheduleId,
+    institutionId,
+    instituteId: institutionId,
     busId: scheduleData.busId || '',
     busNumber: scheduleData.busNumber || '',
     driverId: scheduleData.driverId || '',

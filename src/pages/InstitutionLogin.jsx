@@ -25,7 +25,7 @@ export default function InstitutionLogin() {
     }
   }, [currentUser, navigate, showSuccess]);
 
-  const [selectedInstId, setSelectedInstId] = useState('INST-ABC-SCHOOL');
+  const [selectedInstId, setSelectedInstId] = useState('INST-AU');
   const [institutionIdInput, setInstitutionIdInput] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -73,7 +73,7 @@ export default function InstitutionLogin() {
         i => i.id.toLowerCase().includes(institutionIdInput.trim().toLowerCase()) ||
              i.shortName.toLowerCase().includes(institutionIdInput.trim().toLowerCase())
       );
-      await loginAsInstitutionDemo(matched ? matched.id : 'INST-ABC-SCHOOL');
+      await loginAsInstitutionDemo(matched ? matched.id : 'INST-AU');
       setShowSuccess(true);
     } catch (err) {
       setError('Authentication failed. Please verify institution credentials.');

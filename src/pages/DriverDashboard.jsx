@@ -36,9 +36,11 @@ export default function DriverDashboard() {
   // Active view: 'trip' | 'jobs' | 'applications' | 'profile' | 'history'
   const [activeTab, setActiveTab] = useState('trip');
 
-  // Bus & Route IDs
-  const busId = currentUser?.busId || currentUser?.assignedBusId || 'BUS-12';
-  const routeId = currentUser?.routeId || currentUser?.assignedRouteId || 'ROUTE-05';
+  // Bus & Route IDs (Strictly from authenticated user assignment)
+  const busId = currentUser?.busId || currentUser?.assignedBusId || null;
+  const routeId = currentUser?.routeId || currentUser?.assignedRouteId || null;
+  const institutionId = currentUser?.institutionId || currentUser?.instituteId || 'INST-AU';
+  const institutionName = currentUser?.institutionName || 'Andhra University';
 
   const [busData, setBusData] = useState(null);
   const [routeData, setRouteData] = useState(null);
@@ -69,10 +71,11 @@ export default function DriverDashboard() {
   const lastStreamTime = useRef(0);
 
   // Driver Verification & Onboarding status
-  const verificationStatus = (currentUser?.verificationStatus || currentUser?.status || 'approved').toLowerCase();
+  const verificationStatus = (currentUser?.verificationStatus || currentUser?.status || 'pending').toLowerCase();
   const isApproved = verificationStatus === 'approved' || verificationStatus === 'verified';
   const isRejected = verificationStatus === 'rejected';
   const isPending = !isApproved && !isRejected;
+  const hasValidAssignment = isApproved && Boolean(busId) && Boolean(routeId);
 
   // Freshness ticker
   useEffect(() => {
@@ -192,10 +195,12 @@ export default function DriverDashboard() {
             heading: heading || 0,
             accuracy: Math.round(accuracy || 5),
             timestamp,
-            driverId: currentUser?.uid,
-            driverName: currentUser?.fullName || currentUser?.name || 'Driver',
+            driverId: currentUser?.uid || '',
+            driverName: currentUser?.fullName || currentUser?.name || 'Verified Driver',
             driverPhone: currentUser?.phone || '',
-            busId
+            busId,
+            institutionId: currentUser?.institutionId || currentUser?.instituteId || busData?.institutionId || 'INST-AU',
+            institutionName: currentUser?.institutionName || busData?.institutionName || 'Andhra University'
           });
         } catch (err) {
           console.error('GPS telemetry sync error:', err);
@@ -229,53 +234,83 @@ export default function DriverDashboard() {
     }
   };
 
-  // Handle Start Trip Action
+  // Handle Start Trip Action: Requires valid assignment and real hardware GPS fix
   const handleStartTrip = async () => {
+    if (!hasValidAssignment) {
+      setGpsError('Cannot start trip: Driver profile must be approved with an assigned vehicle and route.');
+      return;
+    }
+
     setIsStarting(true);
     setGpsError(null);
 
-    // Initial starting coordinate: hardware GPS or Route corridor starting point
-    const fallbackCoords = {
-      latitude: 16.5062,
-      longitude: 80.6480,
-      accuracy: 10,
-      speed: 0,
-      heading: 0
-    };
-    const startingCoords = currentCoords || fallbackCoords;
+    if (!navigator.geolocation) {
+      setGpsError('Live location unavailable: Browser geolocation is not supported on this device.');
+      setIsStarting(false);
+      return;
+    }
 
     try {
+      // Prompt and obtain genuine hardware GPS fix
+      const initialPos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0
+        });
+      });
+
+      const { latitude, longitude, speed, heading, accuracy } = initialPos.coords;
+      const startingCoords = {
+        latitude,
+        longitude,
+        speed: speed ? Math.round(speed * 3.6) : 0,
+        heading: heading || 0,
+        accuracy: Math.round(accuracy || 5)
+      };
+
+      const institutionId = currentUser?.institutionId || currentUser?.instituteId || busData?.institutionId || 'INST-AU';
+      const institutionName = currentUser?.institutionName || busData?.institutionName || 'Andhra University';
+
       const tripId = await startDriverTrip({
         busId,
-        routeId: routeId || 'ROUTE-05',
+        routeId,
+        institutionId,
+        institutionName,
         driverInfo: {
-          uid: currentUser?.uid || 'DRV-RAVI-KUMAR',
-          driverId: currentUser?.uid || 'DRV-RAVI-KUMAR',
-          name: currentUser?.fullName || currentUser?.name || 'Ravi Kumar',
-          phone: currentUser?.phone || '+91 98481 23456',
-          busNumber: busData?.busNumber || currentUser?.busNumber || 'Bus 12',
-          busRegistrationNumber: busData?.registrationNumber || currentUser?.busRegistrationNumber || 'AP 16 TE 4421',
-          routeName: routeData?.routeName || routeData?.name || currentUser?.routeName || 'Route 05: Benz Circle → ABC Campus'
+          uid: currentUser?.uid || '',
+          driverId: currentUser?.uid || '',
+          name: currentUser?.fullName || currentUser?.name || 'Verified Driver',
+          phone: currentUser?.phone || '',
+          busNumber: busData?.busNumber || busId,
+          busRegistrationNumber: busData?.registrationNumber || busData?.plateNumber || '',
+          routeName: routeData?.name || routeData?.routeName || 'Assigned Route',
+          institutionId,
+          institutionName
         },
         initialCoords: startingCoords
       });
+
       setActiveTripId(tripId);
       setCurrentCoords(startingCoords);
+      setLastGpsTimestamp(Date.now());
 
-      // Start hardware GPS tracking immediately
+      // Start continuous real hardware GPS streaming
       startGpsTracking(tripId);
 
-      setQuickNotice('Trip started. Live GPS location streaming is active.');
+      setQuickNotice('Trip started. Live hardware GPS telemetry streaming.');
       setTimeout(() => setQuickNotice(null), 4000);
     } catch (err) {
-      console.error('Failed to start trip:', err);
-      // Even if cloud write was delayed, engage local trip mode so driver can operate
-      const fallbackTripId = `TRIP-${busId}-${Date.now()}`;
-      setActiveTripId(fallbackTripId);
-      setCurrentCoords(startingCoords);
-      startGpsTracking(fallbackTripId);
-      setQuickNotice('Trip started in local tracking mode.');
-      setTimeout(() => setQuickNotice(null), 4000);
+      console.error('Failed to start trip with hardware GPS:', err);
+      let msg = 'Live location unavailable: Please grant browser GPS location permissions to start your trip.';
+      if (err.code === 1) {
+        msg = 'Live location unavailable: GPS permission was denied in your browser settings.';
+      } else if (err.code === 2) {
+        msg = 'Live location unavailable: Hardware GPS signal unavailable. Please ensure sky view.';
+      } else if (err.code === 3) {
+        msg = 'Live location unavailable: GPS acquisition timed out. Please try again.';
+      }
+      setGpsError(msg);
     } finally {
       setIsStarting(false);
     }
@@ -292,8 +327,9 @@ export default function DriverDashboard() {
       const tripId = activeTripId || busData?.activeTripId;
       await endDriverTrip(busId, tripId, {
         uid: currentUser?.uid,
-        name: currentUser?.fullName || currentUser?.name || 'Driver',
-        phone: currentUser?.phone || ''
+        name: currentUser?.fullName || currentUser?.name || 'Verified Driver',
+        phone: currentUser?.phone || '',
+        institutionId: currentUser?.institutionId || currentUser?.instituteId || busData?.institutionId || 'INST-AU'
       });
 
       setActiveTripId(null);
@@ -403,13 +439,7 @@ export default function DriverDashboard() {
   };
 
   const gpsStatus = getGpsFreshnessStatus();
-  const stopsList = routeData?.stops || [
-    { name: 'Benz Circle', time: '07:00 AM' },
-    { name: 'Ramavarappadu', time: '07:15 AM' },
-    { name: 'Enikepadu', time: '07:30 AM' },
-    { name: 'Nidamanuru', time: '07:45 AM' },
-    { name: 'College Campus', time: '08:00 AM' }
-  ];
+  const stopsList = routeData?.stops || [];
 
   const pendingInvitationsCount = useMemo(() => {
     return invitations.filter(i => (i.status || 'PENDING') === 'PENDING').length;
@@ -510,8 +540,8 @@ export default function DriverDashboard() {
             =================================================================== */}
         {activeTab === 'trip' && (
           <div>
-            {!busId ? (
-              /* UNASSIGNED BUT VERIFIED STATE */
+            {!hasValidAssignment ? (
+              /* UNASSIGNED OR PENDING APPROVAL STATE */
               <div style={{
                 background: '#FFFFFF',
                 borderRadius: '16px',
@@ -524,21 +554,25 @@ export default function DriverDashboard() {
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: '#EFF6FF',
-                  color: '#2563EB',
+                  background: isApproved ? '#EFF6FF' : '#FFFBEB',
+                  color: isApproved ? '#2563EB' : '#D97706',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 16px auto'
                 }}>
-                  <Bus size={32} />
+                  {isApproved ? <Bus size={32} /> : <Clock size={32} />}
                 </div>
 
                 <h2 style={{ fontSize: '1.3rem', fontWeight: 800, margin: '0 0 6px 0', color: '#0F172A' }}>
-                  No Active Bus Duty Scheduled for Today
+                  {isApproved
+                    ? 'Awaiting Bus & Route Duty Assignment'
+                    : 'Driver Verification in Progress'}
                 </h2>
-                <p style={{ maxWidth: '520px', margin: '0 auto 24px auto', fontSize: '0.88rem', color: '#64748B', lineHeight: '1.5' }}>
-                  You are a <strong>Platform Verified Professional Driver</strong> ready for service. Educational institutions can discover your verified profile and invite you to operate routes, or you can browse and apply for open school/college driving positions.
+                <p style={{ maxWidth: '540px', margin: '0 auto 24px auto', fontSize: '0.88rem', color: '#64748B', lineHeight: '1.5' }}>
+                  {isApproved
+                    ? `Your driver profile is Platform Verified for ${currentUser?.institutionName || 'Andhra University'}. The transport department is currently assigning your operating vehicle and route corridor.`
+                    : `Your driver profile and commercial documents have been submitted to ${currentUser?.institutionName || 'Andhra University'} and are currently being reviewed by the transport administrator.`}
                 </p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -594,7 +628,7 @@ export default function DriverDashboard() {
                     <div className="trip-card-header-row">
                       <div className="trip-title-cluster">
                         <span className="route-eyebrow">Operating Corridor</span>
-                        <h2>{routeData?.name || routeData?.routeName || 'Route 05: Benz Circle → ABC Campus'}</h2>
+                        <h2>{routeData?.name || routeData?.routeName || 'Assigned Institutional Corridor'}</h2>
                       </div>
 
                       <div className="trip-status-pill-wrap">
@@ -610,14 +644,34 @@ export default function DriverDashboard() {
                       <div className="next-stop-info">
                         <span className="next-stop-label">Next Corridor Stop:</span>
                         <strong className="next-stop-name">
-                          {stopsList.length > 0 ? (isTripActive ? stopsList[1]?.name : stopsList[0].name) : 'Ramavarappadu'}
+                          {stopsList.length > 0 ? (isTripActive ? (stopsList[1]?.name || stopsList[0].name) : stopsList[0].name) : 'Campus Terminal'}
                         </strong>
                       </div>
                       <div className="next-stop-eta">
-                        <span>ETA:</span>
-                        <strong>{isTripActive ? '14 min' : '07:15 AM'}</strong>
+                        <span>Status:</span>
+                        <strong>{isTripActive ? 'Live In Transit' : 'Scheduled'}</strong>
                       </div>
                     </div>
+
+                    {/* GPS Error Alert */}
+                    {gpsError && (
+                      <div style={{
+                        margin: '12px 0',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        color: '#991B1B',
+                        fontSize: '0.84rem',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                      }}>
+                        <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                        <span>{gpsError}</span>
+                      </div>
+                    )}
 
                     {/* Large Start/End Trip Action Button */}
                     <div className="cockpit-action-controls-row">
@@ -662,12 +716,12 @@ export default function DriverDashboard() {
                     <div className="telemetry-metrics-grid">
                       <div className="telemetry-metric-item">
                         <span className="metric-label">Vehicle Speed</span>
-                        <strong className="metric-val">{currentCoords?.speed ? `${currentCoords.speed} km/h` : '38 km/h'}</strong>
+                        <strong className="metric-val">{currentCoords?.speed != null ? `${currentCoords.speed} km/h` : (isTripActive ? '0 km/h' : 'Standby')}</strong>
                       </div>
 
                       <div className="telemetry-metric-item">
                         <span className="metric-label">Accuracy</span>
-                        <strong className="metric-val">{currentCoords?.accuracy ? `±${currentCoords.accuracy}m` : '±5m (High)'}</strong>
+                        <strong className="metric-val">{currentCoords?.accuracy != null ? `±${currentCoords.accuracy}m` : (isTripActive ? 'Acquiring...' : '--')}</strong>
                       </div>
 
                       <div className="telemetry-metric-item">
@@ -675,13 +729,13 @@ export default function DriverDashboard() {
                         <strong className="metric-val">
                           {currentCoords
                             ? `${currentCoords.latitude.toFixed(4)}°N, ${currentCoords.longitude.toFixed(4)}°E`
-                            : '16.5062°N, 80.6480°E'}
+                            : (isTripActive ? 'Acquiring satellite lock...' : 'Awaiting trip start')}
                         </strong>
                       </div>
 
                       <div className="telemetry-metric-item">
                         <span className="metric-label">Cloud Sync</span>
-                        <strong className="metric-val green">{isConnected ? 'RTDB Active' : 'Connecting...'}</strong>
+                        <strong className="metric-val green">{isConnected ? (isTripActive ? 'RTDB Streaming' : 'RTDB Connected') : 'Connecting...'}</strong>
                       </div>
                     </div>
                   </div>
@@ -699,13 +753,13 @@ export default function DriverDashboard() {
                       <BusMap
                         busData={{
                           ...busData,
-                          latitude: currentCoords?.latitude || busData?.latitude || 16.5062,
-                          longitude: currentCoords?.longitude || busData?.longitude || 80.6480,
-                          speed: currentCoords?.speed || busData?.speed || 38,
+                          latitude: currentCoords?.latitude || busData?.latitude || 17.7290,
+                          longitude: currentCoords?.longitude || busData?.longitude || 83.3180,
+                          speed: currentCoords?.speed || 0,
                           heading: currentCoords?.heading || 0,
                           status: isTripActive ? 'LIVE' : 'AVAILABLE',
                           busNumber: busData?.busNumber || busId,
-                          driverName: currentUser?.fullName || currentUser?.name || 'Ravi Kumar'
+                          driverName: currentUser?.fullName || currentUser?.name || 'Verified Driver'
                         }}
                         routePath={routeData?.polyline}
                         stops={stopsList}
@@ -733,9 +787,9 @@ export default function DriverDashboard() {
                       </div>
                       <div className="vehicle-info-block">
                         <h4>Bus {busData?.busNumber || busId}</h4>
-                        <code>{busData?.registrationNumber || 'AP 16 TE 4421'}</code>
+                        <code>{busData?.registrationNumber || busData?.plateNumber || '--'}</code>
                         <span className="campus-badge">
-                          {currentUser?.institutionName || busData?.institutionName || 'ABC International School'}
+                          {currentUser?.institutionName || busData?.institutionName || 'Andhra University'}
                         </span>
                       </div>
                     </div>
@@ -743,15 +797,15 @@ export default function DriverDashboard() {
                     <div className="vehicle-meta-strip">
                       <div className="meta-col">
                         <span className="col-label">Seating</span>
-                        <strong className="col-val">{busData?.capacity || 48} Seats</strong>
+                        <strong className="col-val">{busData?.capacity ? `${busData.capacity} Seats` : 'Standard'}</strong>
                       </div>
                       <div className="meta-col">
                         <span className="col-label">Departure</span>
-                        <strong className="col-val">07:00 AM</strong>
+                        <strong className="col-val">{routeData?.departureTime || 'Scheduled'}</strong>
                       </div>
                       <div className="meta-col">
                         <span className="col-label">Students</span>
-                        <strong className="col-val green">28 Assigned</strong>
+                        <strong className="col-val green">{busData?.assignedStudentsCount ? `${busData.assignedStudentsCount} Assigned` : 'Configured'}</strong>
                       </div>
                     </div>
                   </div>

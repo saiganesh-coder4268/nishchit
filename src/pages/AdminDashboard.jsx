@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BusMap from '../components/BusMap';
@@ -24,6 +24,7 @@ import {
   updateSchedule,
   deleteSchedule
 } from '../services/transportService';
+import { REGISTERED_INSTITUTIONS } from '../data/regionData';
 import {
   ShieldCheck, Bus, MapPin, Building2, AlertTriangle,
   CheckCircle2, XCircle, Radio, Plus, UserCheck,
@@ -35,6 +36,17 @@ export default function AdminDashboard() {
   const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Institution context
+  const institutionId = currentUser?.institutionId || currentUser?.instituteId || 'INST-AU';
+  const currentInstitution = useMemo(() => {
+    return REGISTERED_INSTITUTIONS.find(i => i.id === institutionId || i.instituteId === institutionId) || {
+      id: institutionId,
+      name: currentUser?.institutionName || 'Andhra University',
+      city: 'Visakhapatnam',
+      campus: 'Visakhapatnam Campus'
+    };
+  }, [institutionId, currentUser]);
 
   // Navigation tabs: 'overview' | 'drivers' | 'buses' | 'routes' | 'schedules' | 'fleet' | 'incidents'
   const [activeTab, setActiveTab] = useState('overview');
@@ -126,31 +138,31 @@ export default function AdminDashboard() {
         const updated = data.find((b) => b.id === selectedBusForMap.id);
         if (updated) setSelectedBusForMap((prev) => ({ ...prev, ...updated }));
       }
-    });
+    }, institutionId);
 
     const unsubRoutes = subscribeRoutes((data) => {
       setRoutesList(data);
-    });
+    }, institutionId);
 
     const unsubDrivers = subscribeDriverApplications((data) => {
       setDriverApps(data);
-    });
+    }, institutionId);
 
     const unsubSchedules = subscribeSchedules((data) => {
       setSchedulesList(data);
-    });
+    }, institutionId);
 
     const unsubActiveTrips = subscribeActiveTrips((data) => {
       setActiveTrips(data);
-    });
+    }, institutionId);
 
     const unsubHistory = subscribeTripHistory((data) => {
       setTripHistory(data);
-    });
+    }, institutionId);
 
     const unsubIncidents = subscribeIncidentReports((data) => {
       setIncidents(data);
-    });
+    }, institutionId);
 
     return () => {
       unsubBuses();
@@ -161,7 +173,7 @@ export default function AdminDashboard() {
       unsubHistory();
       unsubIncidents();
     };
-  }, []);
+  }, [institutionId]);
 
   // 2. Realtime GPS Stream for Map
   useEffect(() => {
@@ -205,10 +217,14 @@ export default function AdminDashboard() {
     try {
       await approveDriverApplication(
         reviewingDriver.applicationId || reviewingDriver.id,
-        reviewingDriver.driverId || reviewingDriver.uid,
-        bId,
-        rId,
-        currentUser?.uid || 'admin'
+        {
+          driverId: reviewingDriver.driverId || reviewingDriver.uid,
+          busId: bId,
+          routeId: rId,
+          approvedBy: currentUser?.uid || 'admin',
+          institutionId,
+          institutionName: currentInstitution.name
+        }
       );
       showFeedback(`Driver ${reviewingDriver.fullName || reviewingDriver.name} approved and assigned to Bus.`);
       setReviewingDriver(null);
@@ -256,11 +272,17 @@ export default function AdminDashboard() {
           busNumber: busForm.busNumber,
           registrationNumber: busForm.registrationNumber,
           capacity: Number(busForm.capacity),
-          status: busForm.status
+          status: busForm.status,
+          institutionId,
+          institutionName: currentInstitution.name
         });
         showFeedback(`Bus ${busForm.busNumber} updated.`);
       } else {
-        await createBus(busForm);
+        await createBus({
+          ...busForm,
+          institutionId,
+          institutionName: currentInstitution.name
+        });
         showFeedback(`Bus ${busForm.busNumber} added to fleet.`);
       }
       setShowBusModal(false);
@@ -303,7 +325,9 @@ export default function AdminDashboard() {
         reportingTime: routeForm.reportingTime,
         departureTime: routeForm.departureTime,
         expectedArrival: routeForm.expectedArrival,
-        stops
+        stops,
+        institutionId,
+        institutionName: currentInstitution.name
       };
 
       if (editingRoute) {
@@ -341,7 +365,7 @@ export default function AdminDashboard() {
 
     const stopsText = defaultRoute?.stops?.length
       ? defaultRoute.stops.map((s) => `${s.name} — ${s.scheduledTime || '07:25 AM'}`).join(', ')
-      : 'Mayuri Junction — 07:25 AM, Balaji Nagar — 07:35 AM, Thagarapuvalasa — 07:55 AM';
+      : 'Gajuwaka Junction — 07:25 AM, NAD Junction — 07:45 AM, AU Campus — 08:20 AM';
 
     setScheduleForm({
       busId: defaultBus?.id || '',
@@ -388,7 +412,9 @@ export default function AdminDashboard() {
         departureTime: scheduleForm.departureTime,
         reportingTime: scheduleForm.reportingTime,
         expectedArrival: scheduleForm.expectedArrival,
-        stops: parsedStops
+        stops: parsedStops,
+        institutionId,
+        institutionName: currentInstitution.name
       };
 
       if (editingSchedule) {
@@ -396,9 +422,8 @@ export default function AdminDashboard() {
         showFeedback('Schedule updated successfully.');
       } else {
         await createSchedule(payload);
-        showFeedback('Schedule created and assigned successfully.');
+        showFeedback('Schedule created successfully.');
       }
-
       setShowScheduleModal(false);
       setEditingSchedule(null);
     } catch (err) {

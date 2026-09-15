@@ -28,7 +28,7 @@ export default function DriverLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleDemoDriverLogin = async (driverId = 'DRV-RAVI-KUMAR') => {
+  const handleDemoDriverLogin = async (driverId = 'DRV-SURESH-REDDY') => {
     setError('');
     setLoading(true);
     try {
@@ -93,7 +93,7 @@ export default function DriverLogin() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button
             type="button"
-            onClick={() => handleDemoDriverLogin('DRV-RAVI-KUMAR')}
+            onClick={() => handleDemoDriverLogin('DRV-SURESH-REDDY')}
             disabled={loading}
             style={{
               display: 'flex',
@@ -109,10 +109,10 @@ export default function DriverLogin() {
           >
             <div>
               <strong style={{ display: 'block', fontSize: '0.88rem', color: '#14532D' }}>
-                Ravi Kumar (Platform Verified)
+                Suresh Reddy (Platform Verified)
               </strong>
               <span style={{ fontSize: '0.74rem', color: '#15803D' }}>
-                Assigned: Bus 12 • Route 05 (Benz Circle → Campus)
+                Assigned: Bus AU01 • Route AU01 (Andhra University Corridor)
               </span>
             </div>
             <span style={{
@@ -129,7 +129,7 @@ export default function DriverLogin() {
 
           <button
             type="button"
-            onClick={() => handleDemoDriverLogin('DRV-SURESH-M')}
+            onClick={() => handleDemoDriverLogin('DRV-APPALA-NAIDU')}
             disabled={loading}
             style={{
               display: 'flex',
@@ -145,10 +145,10 @@ export default function DriverLogin() {
           >
             <div>
               <strong style={{ display: 'block', fontSize: '0.88rem', color: '#0F172A' }}>
-                M. Suresh (Available for Hire)
+                K. Appala Naidu (Available for Hire)
               </strong>
               <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
-                Independent Verified Driver • Vijayawada
+                Independent Verified Driver • Visakhapatnam
               </span>
             </div>
             <span style={{

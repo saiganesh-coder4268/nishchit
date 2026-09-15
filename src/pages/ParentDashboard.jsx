@@ -54,8 +54,8 @@ export default function ParentDashboard() {
   }, [students, selectedStudentId]);
 
   // Discovery State (FROM -> TO -> FIND BUSES)
-  const [fromLocation, setFromLocation] = useState(() => activeStudent?.institutionName || currentUser?.institutionName || 'GITAM (Deemed to be University)');
-  const [toDestination, setToDestination] = useState(() => activeStudent?.stopName || currentUser?.stopName || 'MVP Colony');
+  const [fromLocation, setFromLocation] = useState(() => activeStudent?.institutionName || currentUser?.institutionName || 'Andhra University');
+  const [toDestination, setToDestination] = useState(() => activeStudent?.stopName || currentUser?.stopName || 'Siripuram Circle');
   const [hasSearched, setHasSearched] = useState(false);
 
   // Sync with active student selection
