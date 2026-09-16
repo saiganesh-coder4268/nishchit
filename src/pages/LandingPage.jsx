@@ -113,12 +113,12 @@ export default function LandingPage({ initialPortal = null }) {
   useEffect(() => {
     if (currentUser && !loading) {
       if (currentUser.role === 'driver') {
-        const isApproved = (currentUser.verificationStatus || '').toLowerCase() === 'approved';
+        const isApproved = ['approved', 'verified', 'active'].includes((currentUser.verificationStatus || currentUser.status || '').toLowerCase());
         if (isApproved && !currentUser.needsDriverRegistration) {
           navigate('/driver/dashboard', { replace: true });
         }
       } else if (currentUser.role === 'parent') {
-        if (!currentUser.needsStudentLink && currentUser.busId) {
+        if (!currentUser.needsStudentLink) {
           navigate('/parent/dashboard', { replace: true });
         }
       } else if (currentUser.role === 'admin' || currentUser.role === 'institution') {
@@ -147,7 +147,7 @@ export default function LandingPage({ initialPortal = null }) {
     setLoading(true);
     try {
       const res = await loginWithGoogle('parent');
-      if (res?.needsStudentLink || !res?.busId) {
+      if (res?.needsStudentLink) {
         // Will display student setup form in the same persistent card
       } else {
         navigate('/parent/dashboard', { replace: true });
@@ -187,7 +187,7 @@ export default function LandingPage({ initialPortal = null }) {
     setError('');
 
     try {
-      const selectedInst = institutesList.find(i => i.id === parentForm.institutionId || i.instituteId === parentForm.institutionId) || institutesList[0];
+      const selectedInst = institutesList.find(i => i.id === parentForm.institutionId || i.instituteId === parentForm.institutionId) || institutesList[0] || { id: 'INST-AU', name: 'Andhra University' };
       const instBuses = busesList.filter(b => (b.institutionId || b.instituteId) === selectedInst.id);
       const selectedBus = instBuses.find(b => b.id === parentForm.busId) || instBuses[0] || { id: 'BUS-AU01', busNumber: 'Bus AU01' };
       const instRoutes = routesList.filter(r => (r.institutionId || r.instituteId) === selectedInst.id);
@@ -223,7 +223,7 @@ export default function LandingPage({ initialPortal = null }) {
     setLoading(true);
     try {
       const res = await loginWithGoogle('driver');
-      const isApproved = (res?.verificationStatus || '').toLowerCase() === 'approved';
+      const isApproved = ['approved', 'verified', 'active'].includes((res?.verificationStatus || res?.status || '').toLowerCase());
       if (isApproved && !res?.needsDriverRegistration) {
         navigate('/driver/dashboard', { replace: true });
       }
@@ -271,7 +271,7 @@ export default function LandingPage({ initialPortal = null }) {
     setError('');
 
     try {
-      const selectedInst = institutesList.find(i => i.id === driverForm.institutionId || i.instituteId === driverForm.institutionId) || institutesList[0];
+      const selectedInst = institutesList.find(i => i.id === driverForm.institutionId || i.instituteId === driverForm.institutionId) || institutesList[0] || { id: 'INST-AU', name: 'Andhra University' };
 
       await submitDriverVerificationRequest({
         uid: currentUser.uid,

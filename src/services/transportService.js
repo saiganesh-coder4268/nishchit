@@ -633,6 +633,7 @@ export async function linkParentStudentTransport(parentUid, studentData) {
     role: 'parent',
     status: 'active',
     hasStudentLinked: true,
+    needsStudentLink: false,
     instituteId: payload.instituteId,
     instituteName: payload.instituteName,
     routeId: payload.routeId,
@@ -1212,11 +1213,11 @@ export async function endDriverTrip(arg1, arg2, arg3) {
 
   if (busId) {
     try {
-      await updateDoc(doc(db, 'buses', busId), {
+      await setDoc(doc(db, 'buses', busId), {
         status: 'COMPLETED',
         activeTripId: null,
         updatedAt: now
-      });
+      }, { merge: true });
     } catch (e) {
       console.warn('Bus status note:', e);
     }

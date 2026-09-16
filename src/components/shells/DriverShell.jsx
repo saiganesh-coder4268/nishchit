@@ -44,7 +44,15 @@ export default function DriverShell({
   ];
 
   const handleSelectTab = (tabId) => {
-    if (onTabChange) onTabChange(tabId);
+    if (onTabChange) {
+      onTabChange(tabId);
+    } else {
+      if (tabId === 'trip') navigate('/driver/dashboard');
+      else if (tabId === 'jobs') navigate('/driver/dashboard');
+      else if (tabId === 'applications') navigate('/driver/notifications');
+      else if (tabId === 'profile') navigate('/driver/profile');
+      else if (tabId === 'history') navigate('/driver/dashboard');
+    }
     setMobileMenuOpen(false);
   };
 

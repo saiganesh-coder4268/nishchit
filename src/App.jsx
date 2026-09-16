@@ -121,7 +121,7 @@ function AppContent() {
           <Route
             path="/parent/login"
             element={
-              currentUser?.role === 'parent' && !currentUser?.needsStudentLink && currentUser?.busId ? (
+              currentUser?.role === 'parent' && !currentUser?.needsStudentLink ? (
                 <Navigate to="/parent/dashboard" replace />
               ) : (
                 <LandingPage initialPortal="parent" />
@@ -132,7 +132,7 @@ function AppContent() {
           <Route
             path="/driver/login"
             element={
-              currentUser?.role === 'driver' && (currentUser?.verificationStatus || '').toLowerCase() === 'approved' && !currentUser?.needsDriverRegistration ? (
+              currentUser?.role === 'driver' && ['approved', 'verified', 'active'].includes((currentUser?.verificationStatus || currentUser?.status || '').toLowerCase()) && !currentUser?.needsDriverRegistration ? (
                 <Navigate to="/driver/dashboard" replace />
               ) : (
                 <LandingPage initialPortal="driver" />

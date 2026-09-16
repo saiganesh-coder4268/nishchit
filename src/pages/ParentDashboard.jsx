@@ -627,7 +627,7 @@ export default function ParentDashboard() {
   const isComingSoon = selectedInstObj?.status === 'COMING_SOON';
 
   return (
-    <ParentShell activeTab="home" onTabChange={() => {}}>
+    <ParentShell activeTab="home">
       <div className="parent-discovery-page">
         {/* Child switcher bar if multiple children */}
         {students.length > 0 && (

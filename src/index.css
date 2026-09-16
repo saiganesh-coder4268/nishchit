@@ -1420,6 +1420,27 @@ input, textarea, select {
   }
 }
 
+@media (max-width: 768px) {
+  .hero-media-column {
+    min-height: auto;
+    padding: 32px 20px 24px;
+  }
+  .hero-media-column .hero-media-title {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+  .hero-media-column .hero-pillars-row {
+    display: none;
+  }
+  .hero-bottom-glass-pill {
+    display: none;
+  }
+  .hero-portal-column {
+    padding: 20px 16px 40px;
+    min-height: auto;
+  }
+}
+
 /* ==========================================================================
    WORKSPACE SHELL LAYOUTS (Sidebar + Viewport Hierarchy)
    ========================================================================== */

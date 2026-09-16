@@ -38,7 +38,7 @@ export default function DriverDashboard() {
 
   // Bus & Route IDs (Strictly from authenticated user assignment)
   const busId = currentUser?.busId || currentUser?.assignedBusId || null;
-  const routeId = currentUser?.routeId || currentUser?.assignedRouteId || null;
+  const routeId = currentUser?.routeId || currentUser?.assignedRouteId || busData?.routeId || busData?.assignedRouteId || null;
   const institutionId = currentUser?.institutionId || currentUser?.instituteId || 'INST-AU';
   const institutionName = currentUser?.institutionName || 'Andhra University';
 
@@ -72,7 +72,7 @@ export default function DriverDashboard() {
 
   // Driver Verification & Onboarding status
   const verificationStatus = (currentUser?.verificationStatus || currentUser?.status || 'pending').toLowerCase();
-  const isApproved = verificationStatus === 'approved' || verificationStatus === 'verified';
+  const isApproved = verificationStatus === 'approved' || verificationStatus === 'verified' || verificationStatus === 'active';
   const isRejected = verificationStatus === 'rejected';
   const isPending = !isApproved && !isRejected;
   const hasValidAssignment = isApproved && Boolean(busId) && Boolean(routeId);

@@ -44,6 +44,12 @@ export default function ParentShell({
 
   const handleSelectTab = (tabId) => {
     if (onTabChange) onTabChange(tabId);
+    if (tabId === 'home') navigate('/parent/dashboard');
+    else if (tabId === 'track') navigate('/parent/live-location');
+    else if (tabId === 'notifications') navigate('/parent/notifications');
+    else if (tabId === 'child') navigate('/parent/profile');
+    else if (tabId === 'transport') navigate('/parent/route');
+    else if (tabId === 'help') navigate('/parent/messages');
     setMobileMenuOpen(false);
   };
 
